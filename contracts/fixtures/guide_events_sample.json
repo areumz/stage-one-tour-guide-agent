@@ -1,0 +1,12 @@
+{
+  "success": [
+    {"event": "tool_status", "data": {"tool": "searchShows", "key": "tool.searchShows"}},
+    {"event": "text_delta", "data": {"text": "가장 가까운 공연은 "}},
+    {"event": "action", "data": {"type": "focusArtist", "slug": "aurora"}},
+    {"event": "done", "data": {}}
+  ],
+  "error": [
+    {"event": "text_delta", "data": {"text": "가장 가까운 공연은 "}},
+    {"event": "error", "data": {"code": "rate_limited"}}
+  ]
+}
