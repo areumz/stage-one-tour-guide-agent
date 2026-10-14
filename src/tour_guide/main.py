@@ -12,7 +12,7 @@ from tour_guide.settings import Settings
 
 
 def _configure_logging() -> None:
-    # uvicorn 은 자기 로거만 설정한다. 앱 로거(tour_guide.*)는 여기서 직접 INFO 로 연다
+    # uvicorn 은 자기 로거만 설정함. 앱 로거(tour_guide.*)는 여기서 직접 INFO 로 오픈
     pkg = logging.getLogger("tour_guide")
     pkg.setLevel(logging.INFO)
     if not pkg.handlers:
@@ -24,7 +24,7 @@ def _configure_logging() -> None:
 def build_app() -> FastAPI:
     _configure_logging()
     settings = Settings.from_env()
-    # 운영 트레이싱은 끈다. 켜면 대화 내용이 OpenAI 트레이스로 전송된다 (설계 §7.1)
+    # 운영 트레이싱 off
     set_tracing_disabled(not settings.tracing_enabled)
     cache = ArtistsCache(make_http_fetcher(settings.onstage_url))
     limiter = RateLimiter(settings.rate_per_minute, settings.rate_per_ip_daily, settings.global_daily)

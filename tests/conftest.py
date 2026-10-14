@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from contracts.artists import ArtistsResponse
 
-# 라이브 데이터와 무관한 고정 데이터. 도구·가드레일 테스트의 기대값은 이 데이터와 TODAY 기준이다.
+# 라이브 데이터와 무관한 고정 데이터. 도구·가드레일 테스트의 기대값은 이 데이터와 TODAY 기준 (공연 일수)
 TODAY = date(2026, 10, 13)
 
 

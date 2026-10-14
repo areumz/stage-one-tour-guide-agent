@@ -17,6 +17,7 @@ class Settings:
     allowed_origins: tuple[str, ...] = ("http://localhost:3000",)
     allowed_origin_regex: str | None = None
     openai_model: str = "gpt-4.1-mini"
+    # 임시로 정해둠. 배포 단계에서 확인 후 변경 할 수 있음
     trusted_proxy_hops: int = 1
     rate_per_minute: int = 5
     rate_per_ip_daily: int = 30

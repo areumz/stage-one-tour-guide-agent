@@ -4,7 +4,7 @@ from contracts.guide_events import ActionEvent, GuideEvent
 
 
 def to_sse(event: GuideEvent) -> str:
-    """계약 이벤트를 SSE 프레임 문자열로 바꾼다. action 은 페이로드를 평평하게 편다 (설계 §4)."""
+    """계약 이벤트 SSE 프레임 -> 문자열"""
     if isinstance(event, ActionEvent):
         payload = event.action.model_dump(exclude_none=True)
     else:
