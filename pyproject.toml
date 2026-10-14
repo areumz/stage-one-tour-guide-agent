@@ -1,0 +1,43 @@
+[project]
+name = "tour-guide-agent"
+version = "0.1.0"
+description = "STAGE.ONE 투어 가이드 에이전트 API (Python, FastAPI, OpenAI Agents SDK)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "openai-agents>=0.23",
+    "pydantic>=2.7",
+    "tzdata>=2024.1",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tour_guide", "contracts"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "llm: 실제 LLM 을 호출한다. uv run --env-file .env pytest -m llm 으로만 돈다",
+]
+addopts = "-m 'not llm'"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "contracts", "tests"]
+
+[tool.ruff.lint]
+select = ["F", "I"]

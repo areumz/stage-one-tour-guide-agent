@@ -1,0 +1,20 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      # .python-version(3.12)을 uv 가 읽어 맞는 파이썬을 설치한다
+      - run: uv sync
+      - run: uv run ruff check .
+      # LLM 호출 테스트(-m llm)는 pyproject 의 addopts 로 기본 제외되므로 API 키가 필요 없다
+      - run: uv run pytest
