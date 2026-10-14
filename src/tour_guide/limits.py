@@ -7,7 +7,7 @@ from tour_guide.clock import KST
 
 
 class RateLimiter:
-    """IP별 분당·일일 한도와 전체 일일 한도(킬스위치). 서버 메모리라 재시작 시 초기화된다 (best-effort, 설계 §6)."""
+    """IP별 분당·일일 한도와 전체 일일 한도(킬스위치). 서버 메모리라 재시작 시 초기화 (best-effort, 설계 §6)."""
 
     def __init__(
         self,

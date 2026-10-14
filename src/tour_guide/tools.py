@@ -1,4 +1,4 @@
-"""읽기 전용 도구의 순수 함수. SDK 래퍼는 agent.py 에 있다 (설계 §5)."""
+"""읽기 전용 도구의 순수 함수. SDK 래퍼는 agent.py (설계 §5)."""
 
 from datetime import date
 
@@ -8,7 +8,7 @@ from tour_guide.data import Show, city_names, load_shows, slug_set
 
 
 class ToolInputError(ValueError):
-    """도구 입력이 enum 밖이다. 에이전트에게 오류로 돌려준다."""
+    """도구 입력이 enum 밖. 오류 반환"""
 
 
 def _show_dict(artist: Artist, show: Show, today: date) -> dict:
