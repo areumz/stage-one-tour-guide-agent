@@ -34,7 +34,7 @@ gcloud config configurations create tour-guide
 gcloud auth list                       # 계정 확인. 필요하면 gcloud auth login
 
 # 프로젝트 만들기
-gcloud projects create $PROJECT --name="STAGE.ONE Tour Guide"
+gcloud projects create $PROJECT --name="STAGE-ONE Tour Guide"
 gcloud config set project $PROJECT
 
 # 결제 계정 연결 (Cloud Run·Cloud Build 사용에 필요)
