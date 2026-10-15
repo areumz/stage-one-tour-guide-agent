@@ -41,7 +41,56 @@ def test_retract_parses():
 
 def test_open_tour_parses_with_and_without_section():
     assert parse_event("action", {"type": "openTour", "slug": "aurora"}).action.section is None
-    assert parse_event("action", {"type": "openTour", "slug": "aurora", "section": "news"}).action.section == "news"
+    assert parse_event("action", {"type": "openTour", "slug": "aurora", "section": "album"}).action.section == "album"
+
+
+@pytest.mark.parametrize("section", ["hero", "tour", "album", "gallery"])
+def test_view_context_accepts_known_sections(section):
+    req = GuideRequest(
+        requestId="r1",
+        sessionId="s1",
+        locale="ko",
+        message="x",
+        context={"view": "tour", "slug": "aurora", "section": section},
+    )
+    assert req.context.section == section
+
+
+def test_unknown_section_in_context_is_ignored_but_view_stays_strict():
+    req = GuideRequest(
+        requestId="r1",
+        sessionId="s1",
+        locale="ko",
+        message="x",
+        context={"view": "tour", "slug": "aurora", "section": "news"},
+    )
+    assert req.context.section is None
+    assert req.context.slug == "aurora"
+    with pytest.raises(ValidationError):
+        GuideRequest(
+            requestId="r1", sessionId="s1", locale="ko", message="x", context={"view": "nope"}
+        )
+
+
+def test_unknown_section_in_open_tour_action_is_rejected():
+    # 에이전트가 보내는 쪽은 엄격하다. 모르는 값을 on-stage 로 내보내지 않는다
+    with pytest.raises(ValidationError):
+        parse_event("action", {"type": "openTour", "slug": "aurora", "section": "news"})
+
+
+def test_request_samples_parse():
+    samples = json.loads(SAMPLE.read_text(encoding="utf-8"))["requests"]
+    parsed = [GuideRequest.model_validate(s) for s in samples]
+    assert [p.context.view if p.context else None for p in parsed] == ["orbit", "tour", "tour"]
+    assert [p.context.section for p in parsed] == [None, "album", None]
+
+
+def test_open_tour_with_section_stream_parses():
+    parsed = _parse_stream("success_open_tour_section")
+    assert [type(p) for p in parsed][-2:] == [ActionEvent, Done]
+    assert parsed[-2].action.type == "openTour"
+    assert parsed[-2].action.section == "tour"
+    assert _parse_stream("success_open_tour")[-2].action.section is None
 
 
 def test_highlight_city_parses():

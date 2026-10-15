@@ -107,6 +107,22 @@ def test_ambiguous_reaches_agent_in_stage1():
     assert h.calls == ["오늘 점심 뭐 먹지?"]
 
 
+def test_unknown_section_is_ignored_not_rejected():
+    seen = []
+
+    async def run(req):
+        seen.append(req.context)
+        yield Done()
+
+    h = Harness(run_guide=run)
+    payload = {**body(), "context": {"view": "tour", "slug": "aurora", "section": "news"}}
+    r = h.client.post("/guide/stream", json=payload, headers={"x-forwarded-for": "9.9.9.9"})
+    assert r.status_code == 200
+    assert sse_events(r.text) == [("done", {})]
+    assert seen[0].section is None
+    assert (seen[0].view, seen[0].slug) == ("tour", "aurora")
+
+
 def test_data_unavailable_is_upstream():
     h = Harness(fail_fetch=True)
     assert sse_events(post(h).text) == [("error", {"code": "upstream"})]

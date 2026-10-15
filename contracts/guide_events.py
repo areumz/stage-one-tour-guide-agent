@@ -4,9 +4,9 @@
 `error` 는 종료 이벤트이고 `done` 은 정상 종료에만 보낸다.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 MAX_MESSAGE_CHARS = 200
 # 영숫자, -, _ 만 허용 (클라이언트 UUID 형식). 로그 주입(개행 등)을 막는다.
@@ -14,11 +14,21 @@ ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 
 Locale = Literal["ko", "en"]
 ErrorCode = Literal["rate_limited", "off_topic", "too_long", "busy", "upstream", "internal"]
+# 아티스트 페이지(/artists/[slug])의 섹션. 값은 on-stage 가 정했다 (계약 갱신 C1·C2)
+ArtistSection = Literal["hero", "tour", "album", "gallery"]
 
 
 class ViewContext(BaseModel):
     view: Literal["orbit", "tour"]
     slug: str | None = None
+    # view="tour" 일 때만 의미가 있다. 보내지 않으면 현재 섹션을 모르는 것으로 본다.
+    # 모르는 값은 요청을 거절하지 않고 None 으로 취급한다 (view, slug 는 엄격하다)
+    section: ArtistSection | None = None
+
+    @field_validator("section", mode="before")
+    @classmethod
+    def _ignore_unknown_section(cls, value):
+        return value if value in get_args(ArtistSection) else None
 
 
 class GuideRequest(BaseModel):
@@ -41,7 +51,8 @@ class FocusArtist(BaseModel):
 class OpenTour(BaseModel):
     type: Literal["openTour"] = "openTour"
     slug: str
-    section: str | None = None
+    # 생략하면 on-stage 는 "tour" 로 본다. 에이전트는 당분간 계속 생략한다
+    section: ArtistSection | None = None
 
 
 class HighlightCity(BaseModel):

@@ -8,5 +8,22 @@
   "error": [
     {"event": "text_delta", "data": {"text": "가장 가까운 공연은 "}},
     {"event": "error", "data": {"code": "rate_limited"}}
+  ],
+  "success_open_tour": [
+    {"event": "tool_status", "data": {"tool": "getArtist", "key": "tool.getArtist"}},
+    {"event": "text_delta", "data": {"text": "AURORA의 투어 일정이에요. "}},
+    {"event": "action", "data": {"type": "openTour", "slug": "aurora"}},
+    {"event": "done", "data": {}}
+  ],
+  "success_open_tour_section": [
+    {"event": "tool_status", "data": {"tool": "getArtist", "key": "tool.getArtist"}},
+    {"event": "text_delta", "data": {"text": "AURORA의 투어 일정이에요. "}},
+    {"event": "action", "data": {"type": "openTour", "slug": "aurora", "section": "tour"}},
+    {"event": "done", "data": {}}
+  ],
+  "requests": [
+    {"requestId": "r1", "sessionId": "s1", "locale": "ko", "message": "AURORA 보여줘", "context": {"view": "orbit"}},
+    {"requestId": "r2", "sessionId": "s1", "locale": "ko", "message": "투어 일정 보여줘", "context": {"view": "tour", "slug": "aurora", "section": "album"}},
+    {"requestId": "r3", "sessionId": "s1", "locale": "en", "message": "When is the next show?", "context": {"view": "tour", "slug": "aurora"}}
   ]
 }
