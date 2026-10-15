@@ -43,7 +43,7 @@ on-stage 세션이 읽고 바로 브레인스토밍을 시작하기 위한 진�
 
 ## 3. 요청 규칙
 
-- **매 요청에 `context { view, slug? }`를 보낸다.** `view`는 `orbit | tour`이고 `slug`는 현재 아티스트다. 안 보내면 에이전트는 현재 화면을 "알 수 없음"으로 보고 `focusArtist`를 보내지 않을 수 있다.
+- **매 요청에 `context { view, slug?, section? }`를 보낸다.** `view`는 `orbit | tour`이고 `slug`는 현재 아티스트, `section`은 `hero | tour | album | gallery`(`view="tour"`일 때만 의미)다. 안 보내면 에이전트는 현재 화면을 "알 수 없음"으로 보고 `focusArtist`를 보내지 않을 수 있다.
 - **`POST` + SSE는 `fetch` 스트리밍(`ReadableStream`)으로 읽는다.** `EventSource`는 GET만 지원해서 쓸 수 없다.
 - 이벤트 종류, 종료 규칙(`error`는 종료 이벤트이고 `done`은 정상 종료에만), 요청 필드는 [guide_events.py](../contracts/guide_events.py)와 [design.md §4](design.md)가 기준이다. 안내 문구는 서버가 만들지 않고 `error.code`·`tool_status.key`를 프런트 사전이 ko/en으로 표시한다.
 - 요청 길이, "다시 시도"는 새 요청, 답변 멈추기는 연결 종료다 ([§4](design.md), [§7.2](design.md)).
@@ -58,7 +58,7 @@ on-stage 세션이 읽고 바로 브레인스토밍을 시작하기 위한 진�
 | `openTour { slug }`    | 해당 아티스트 페이지로 이동하고 투어 섹션이 보이게 한다. 연출 순서와 자동 이동/칩 방식은 on-stage가 결정한다 |
 
 - 액션은 답변 끝에 **한 번**, `done` 앞에 온다. 알 수 없는 액션은 무시하고, 실행 전에 `slug`를 다시 검증하며, 실패해도 답변은 항상 표시한다.
-- **이미 그 아티스트의 투어 화면이면 서버가 `openTour`를 보내지 않는다.** 서버는 `context.view`가 `tour`이고 `slug`가 같을 때만 거른다. 그 밖의 중복 방어(예: 같은 액션을 연달아 받은 경우)는 on-stage가 한다.
+- **이미 그 아티스트의 투어 섹션이면 서버가 `openTour`를 보내지 않는다.** 서버는 `context.view`가 `tour`이고 `slug`가 같으며 `section`이 `tour`이거나 없을 때만 거른다. 다른 섹션(`hero`/`album`/`gallery`)을 보는 중이면 보내므로 on-stage가 투어 섹션으로 스크롤한다. 그 밖의 중복 방어는 on-stage가 한다.
 - `tool_status`에 `focusArtist`·`openTour`가 오지 않으므로 사전에 키를 추가할 필요가 없다.
 
 ## 5. 섹션 구분 메모 (on-stage 작업)
@@ -68,8 +68,8 @@ on-stage 세션이 읽고 바로 브레인스토밍을 시작하기 위한 진�
 - 아티스트 페이지(`/artists/[slug]`)는 **섹션 단위로 구분**한다.
 - 사용자가 보고 있는 섹션을 감지해 요청 `context`에 **`section`으로 보낸다**.
 - 같은 페이지에서 `openTour`를 받으면 **투어 섹션으로 스크롤 이동**한다.
-- **섹션 값 목록은 on-stage가 정해** 에이전트 쪽에 "계약 갱신" 요청으로 전달한다. 그 전까지 에이전트는 `context.section`을 쓰지 않고, `openTour.section`도 보내지 않는다.
-- **서버 가드는 지금 `view` + `slug`만 본다.** `section`이 정해지면 계약(`guide_events.py`), 프롬프트의 현재 화면 표기, 서버 중복 필터를 함께 갱신해야 한다.
+- **섹션 값은 `hero`, `tour`, `album`, `gallery`로 확정**됐고 에이전트 쪽 계약 갱신(요청 `context.section`, `openTour.section`, 서버 필터, 프롬프트 표기, fixture)을 반영했다. 값을 늘리려면 "계약 갱신" 요청으로 전달한다. 모르는 `section` 값은 요청을 거절하지 않고 무시된다(`section`이 없는 것으로 취급, `view`·`slug`는 엄격). 에이전트는 `openTour.section`을 당분간 생략한다.
+- 서버 가드는 `view` + `slug` + `section`을 본다 ([contracts/ui_actions.md](../contracts/ui_actions.md)).
 
 ## 6. 진행 방식 (plan 파일 구성)
 
@@ -93,15 +93,15 @@ PYTHONPATH=src:. uv run --env-file .env uvicorn --factory tour_guide.main:build_
 ```
 
 - 상태 확인: `GET http://localhost:8000/health` → `{"status": "ok"}`. 패널을 열 때 한 번 호출해 콜드 스타트를 완화하는 용도로도 쓴다 ([§10](design.md)).
-- `.env`에 `ONSTAGE_URL`과 `OPENAI_API_KEY`가 필요하다 ([.env.example](../.env.example)). 허용 Origin 기본값은 `http://localhost:3000`이며 on-stage 도메인은 `ALLOWED_ORIGINS`에 추가한다.
+- `.env`에 `ONSTAGE_URL`과 `OPENAI_API_KEY`가 필요하다 ([.env.example](../.env.example)). 허용 Origin 기본값은 `http://localhost:3000`이다. 배포 연동 시 `ALLOWED_ORIGINS`에 `https://on-stage-nine.vercel.app`을 추가한다. 프리뷰 도메인 패턴이 필요하면 on-stage가 정해 전달하고, 에이전트는 `ALLOWED_ORIGIN_REGEX`로 받는다(와일드카드 `*`는 금지).
 - 요청·응답 예시는 [README.md](../README.md)의 `curl` 절차를 따른다.
 
 ## 8. 아직 정해지지 않은 것
 
 | 항목                              | 상태                                                                                                |
 | --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `openTour.section` 값 목록        | on-stage가 정한다. 정해지기 전까지 에이전트는 `section`을 보내지 않는다                             |
-| 섹션 구분 방식, `context.section` | on-stage 설계 후 "계약 갱신"으로 전달                                                               |
+| `openTour.section` 값 목록        | **확정** (`hero`/`tour`/`album`/`gallery`). 에이전트는 당분간 생략한다 |
+| 섹션 구분 방식, `context.section` | **확정·에이전트 반영 완료** (계약 갱신 C1~C5). on-stage 구현 대기 |
 | `highlightCity`                   | 4단계. 계약 모델만 있고 에이전트는 아직 보내지 않는다                                               |
 | 세션 기록·`busy`·세션 턴 상한     | 4단계                                                                                               |
 | 출력 검사(`retract`), L3 분류기   | 3단계. 공개 배포 전 필수이며 `retract` 처리는 on-stage 항목에 있다                                  |
