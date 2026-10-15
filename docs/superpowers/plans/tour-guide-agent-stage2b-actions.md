@@ -50,8 +50,8 @@
 
 - **수정:** `src/tour_guide/agent.py`, `tests/test_agent.py`
 - **인터페이스:** `GuideContext(locale, view, action=None, action_calls=0)`, `ACTION_MODELS`, `ACTION_TOOLS`, `record_action_json(cache, ctx, action_type, slug) -> str`, 에이전트 도구 5개 (`listArtists`, `getArtist`, `searchShows`, `focusArtist`, `openTour`)
-- **동작 규칙:** slug가 enum 밖이면 `{"error": ...}`를 돌려주고 기록하지 않는다 (앞선 유효한 값을 지우지 않는다). 유효하면 `ctx.action`을 덮어쓴다. 액션 도구 호출은 `map_stream_event`에서 `None`이다. ctx 인자는 도구 스키마에 나타나지 않는다.
-- **테스트:** 기록·마지막 값 우선, 잘못된 slug 거절과 이전 값 유지, 도구 스키마는 `slug`만, `tool_status` 제외 (도구 2개 파라미터화)
+- **동작 규칙:** slug가 enum 밖이면 `{"error": ...}`를 돌려주고 기록하지 않는다 (앞선 유효한 값을 지우지 않는다). `openTour`이고 `context.view`가 `tour`이며 slug가 같으면(이미 열린 화면) 기록하지 않고 `{"skipped": "이미 열려 있음"}`을 돌려준다 (`view`·`slug`만 보며, 거른 호출도 `action_calls`에 센다). 그 외 유효한 호출은 `ctx.action`을 덮어쓴다. 액션 도구 호출은 `map_stream_event`에서 `None`이다. ctx 인자는 도구 스키마에 나타나지 않는다.
+- **테스트:** 기록·마지막 값 우선, 잘못된 slug 거절과 이전 값 유지, 중복 `openTour` 필터 3케이스(tour/aurora에서 aurora → 미기록, tour/aurora에서 velvet → 기록, orbit에서 aurora → 기록), 도구 스키마는 `slug`만, `tool_status` 제외 (도구 2개 파라미터화)
 - **완료 기준:** `pytest tests/test_agent.py` 통과, `ruff check .` 통과
 
 ### Task 2: 답변 끝에 action 이벤트 발행
@@ -59,30 +59,32 @@
 - **수정:** `src/tour_guide/agent.py`, `tests/test_agent.py`
 - **인터페이스:** `stream_guide`가 정상 종료 시 `... TextDelta, ActionEvent, Done` 순서로 내보낸다. 종료 로그에 `action_calls=<n>`이 붙는다.
 - **동작 규칙:** 로그 → `completed = True` → (액션이 있으면) `ActionEvent` → `Done`. 에러·취소 때는 이 지점에 오지 않는다.
-- **테스트:** 순서(`tool_status`, `text_delta`, `action`, `done`), 액션 없음, 액션 기록 뒤 에러, 중간 종료
+- **테스트:** 순서(`tool_status`, `text_delta`, `action`, `done`), 액션 기록 뒤 에러 시 미발행 (액션 없음·중간 종료는 기존 `normal_run`·`close_midway` 테스트가 이미 검증)
 - **완료 기준:** `pytest tests/test_agent.py` 통과
 
 ### Task 3: 시스템 프롬프트 액션 규칙
 
 - **수정:** `src/tour_guide/agent.py` (`ACTION_RULES`), `tests/test_agent.py`
-- **규칙:** 한국어·영어 모두 같은 규칙, 대상(아티스트 vs 투어 페이지/섹션)으로 구분. 특정 한 아티스트 질문이고 현재 화면이 orbit이면 `focusArtist` 허용(일정 질문 포함), 투어 페이지를 열어 달라는 명시적 요청이면 `openTour`. 여러 아티스트를 다루는 질문·일반 질문은 호출하지 않는다. 불확실하면 호출하지 않고 한 답변에 하나만. `openTour`를 이미 열린 화면에서 다시 호출하지 않는다. slug는 표의 값만, 호출했다는 말은 하지 않는다.
-- **테스트:** 프롬프트에 규칙 핵심 문구와 현재 화면이 들어간다
+- **규칙:** 한국어·영어 모두 같은 규칙, 대상(아티스트 vs 투어 페이지/섹션)으로 구분. 특정 한 아티스트 질문이고 현재 화면이 orbit이면 `focusArtist` 허용, 투어 페이지를 열어 달라는 명시적 요청이면 `openTour`. 동사로 구분한다: 정보 질문(알려줘/언제야/몇 개야)은 `focusArtist`, 이동 요청(보여줘/열어줘/보러 갈래)은 `openTour`. 여러 아티스트를 다루는 질문·일반 질문은 호출하지 않는다. 불확실하면 호출하지 않고 한 답변에 하나만. `openTour`를 이미 열린 화면에서 다시 호출하지 않는다. 액션은 답변을 대신하지 않는다(일정·도시·트랙 질문은 먼저 도구로 조회해 사실로 답하고 액션을 더한다). 이동 결과 표현('열었습니다', '이동했어요')은 쓰지 않는다. slug는 표의 값만, 호출했다는 말은 하지 않는다.
+- **테스트:** 프롬프트에 규칙 핵심 문구(액션 규칙, 대상 구분, 비교 질문 제외, 열린 화면 재호출 금지, 이동 결과 표현 금지, 답변 대체 금지, 정보 질문 예시)와 현재 화면이 들어간다
 - **완료 기준:** `pytest tests/test_agent.py` 통과
 
 ### Task 4: LLM 마커 테스트 (액션 사용 규칙 검증)
 
 - **수정:** `tests/test_llm_smoke.py`
-- **테스트 4개** (`MINI_RAW`의 slug는 `aurora`, `velvet`뿐이며 화면은 `orbit`):
+- **테스트 케이스 6개** (`MINI_RAW`의 slug는 `aurora`, `velvet`뿐이며 화면은 `orbit`):
 
 | 질문                                        | locale | 기대                                                               |
 | ------------------------------------------- | ------ | ------------------------------------------------------------------ |
 | "AURORA 보여줘"                             | ko     | `FocusArtist(aurora)`, `done` 직전, `tool_status`에 액션 도구 없음 |
-| "AURORA 투어 열어줘"                        | ko     | `OpenTour(aurora)`                                                 |
-| "Open the AURORA tour"                      | en     | `OpenTour(aurora)`                                                 |
+| "AURORA 투어 열어줘"                        | ko     | `OpenTour(aurora)` (parametrize)                                   |
+| "Open the AURORA tour"                      | en     | `OpenTour(aurora)` (parametrize)                                   |
+| "AURORA 투어 일정 알려줘"                   | ko     | `FocusArtist(aurora)` (동사 기준, parametrize)                     |
+| "AURORA 투어 일정 보여줘"                   | ko     | `OpenTour(aurora)` (동사 기준, parametrize)                        |
 | "AURORA랑 VELVET 중에 누가 먼저 서울에 와?" | ko     | `ActionEvent` 없음, 답변 텍스트는 있음                             |
 
 - **불안정할 때:** 3회 재현 후 `ACTION_RULES`에 예시 한 줄을 더한다. 테스트 기대값은 고치지 않는다.
-- **완료 기준:** `pytest -m llm tests/test_llm_smoke.py` 6개 통과 (`OPENAI_API_KEY` 없으면 미실행으로 보고). 기본 `pytest`는 영향 없음.
+- **완료 기준:** `pytest -m llm tests/test_llm_smoke.py` 8개 통과 (확률적이라 2~3회 반복) (`OPENAI_API_KEY` 없으면 미실행으로 보고). 기본 `pytest`는 영향 없음.
 
 ### Task 5: contracts [요구사항]과 설계 문서 동기화
 
@@ -96,8 +98,10 @@
 서버를 띄워 `curl`로 확인한다
 
 - 궤도 화면 컨텍스트로 "AURORA 보여줘" → `focusArtist(aurora)`가 `done` 직전에 오고 `tool_status`에 액션 도구가 없다.
-- 궤도 화면 컨텍스트로 "AURORA 투어 일정 알려줘" 5회 → `focusArtist`가 오는지 센다. 거의 안 오면(5번 중 1번 이하) 코드를 바꾸지 않고, `ACTION_RULES` 규칙 3의 '호출해도 된다'를 '호출한다'로 바꾸는 안을 횟수와 함께 보고한다.
+- 궤도 화면 컨텍스트로 "AURORA 투어 일정 알려줘" 5회 → `focusArtist`가 오는지 센다. "보여줘"로 바꾸면 `openTour`가 와야 한다 (동사 기준). 두 경우 모두 데이터 도구가 먼저 호출돼 일정 사실로 답해야 한다. `focusArtist`가 거의 안 오면(5번 중 1번 이하) 코드를 바꾸지 않고, `ACTION_RULES` 규칙 3의 '호출해도 된다'를 '호출한다'로 바꾸는 안을 횟수와 함께 보고한다.
+- 화면 컨텍스트를 `tour/aurora`로 보내고 "AURORA 투어 열어줘" → `action`이 오지 않고 로그의 `action_calls`는 1이다. `velvet`으로 열면 `openTour(velvet)`가 온다.
 - 답변 도중 연결을 끊으면 `guide cancelled` 로그가 남고 `action`은 오지 않는다.
+- 답변 문구에 '열었습니다', '이동했어요' 같은 이동 결과 표현이 없는지 눈으로 확인한다.
 
 ## 후속 (이 계획의 범위 밖)
 
@@ -118,5 +122,7 @@
 | slug 서버 검증, 모르는 액션은 보내지 않음, 답변은 항상 표시     | Task 1    |
 | 에러·취소에서는 보내지 않음                                     | Task 2    |
 | `tool_status`로 내보내지 않음                                   | Task 1    |
+| 같은 투어 화면에서 `openTour` 중복은 서버가 거른다 (수동 확인 반영) | Task 1 |
+| 액션은 답변을 대신하지 않음, 이동 결과 표현 금지, 동사 기준 예시 (수동 확인 반영) | Task 3, 4 |
 | `section` 없이 slug만, on-stage가 정할 값을 [요구사항]으로 기록 | Task 5    |
 | fixture 성공 스트림에 action 예시, on-stage 할 일 정리          | Task 5    |
