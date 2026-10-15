@@ -59,7 +59,17 @@ on-stage 세션이 읽고 바로 브레인스토밍을 시작하기 위한 진�
 
 - 액션은 답변 끝에 **한 번**, `done` 앞에 온다. 알 수 없는 액션은 무시하고, 실행 전에 `slug`를 다시 검증하며, 실패해도 답변은 항상 표시한다.
 - **이미 그 아티스트의 투어 섹션이면 서버가 `openTour`를 보내지 않는다.** 서버는 `context.view`가 `tour`이고 `slug`가 같으며 `section`이 `tour`이거나 없을 때만 거른다. 다른 섹션(`hero`/`album`/`gallery`)을 보는 중이면 보내므로 on-stage가 투어 섹션으로 스크롤한다. 그 밖의 중복 방어는 on-stage가 한다.
+- `retract`된 턴은 action을 보내지 않는다. 순서는 `text_delta… → retract → done`이다.
 - `tool_status`에 `focusArtist`·`openTour`가 오지 않으므로 사전에 키를 추가할 필요가 없다.
+
+### 계약 갱신 요청 (3단계 가드레일, 새 이벤트 타입 없음)
+
+| # | 요청 | 근거 |
+| --- | --- | --- |
+| R1 | 프런트 사전의 `off_topic` 문구를 [design.md §6.1](design.md)의 ko/en 문구로 반영 | §6.1 |
+| R2 | `retract`: `reason: "unverified"` 문구를 사전에 추가하고, `text_delta… → retract → done` 순서(action 없음)를 처리 | §6.2 |
+
+- 분류기 실패는 기존 `upstream`이라 추가 요청이 없다. 예시 스트림은 [fixtures/guide_events_sample.json](../contracts/fixtures/guide_events_sample.json)의 `retract_unverified`다.
 
 ## 5. 섹션 구분 메모 (on-stage 작업)
 

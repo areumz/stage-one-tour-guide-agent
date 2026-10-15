@@ -35,6 +35,13 @@ def test_error_stream_ends_with_error_and_no_done():
     assert not any(isinstance(p, Done) for p in parsed)
 
 
+def test_retract_stream_is_ordered_and_has_no_action():
+    parsed = _parse_stream("retract_unverified")
+    assert [type(p) for p in parsed] == [TextDelta, TextDelta, Retract, Done]
+    assert parsed[2].reason == "unverified"
+    assert not any(isinstance(p, ActionEvent) for p in parsed)
+
+
 def test_retract_parses():
     assert parse_event("retract", {"reason": "off_topic"}) == Retract(reason="off_topic")
 

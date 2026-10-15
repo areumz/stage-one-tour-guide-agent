@@ -23,6 +23,7 @@
 
 - 답변 텍스트가 끝난 뒤, `done` 앞에 **한 번만** 보낸다. 순서는 `text_delta... → action → done` 이다.
 - 에러·취소로 끝나는 요청에서는 보내지 않는다.
+- `retract` 된 턴도 action 을 보내지 않는다. 순서는 `text_delta... → retract → done` 이다.
 - `slug` 는 서버가 `/api/artists` 로 만든 enum 으로 검증한 값만 보낸다. 한 답변에서 여러 번 호출되려 하면 마지막 유효한 것 하나만 보낸다.
 - 액션 도구 호출은 `tool_status` 로 보내지 않는다. 프런트 사전에 `tool.focusArtist`, `tool.openTour` 키를 추가하지 않아도 된다.
 

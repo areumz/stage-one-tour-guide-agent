@@ -21,6 +21,12 @@
     {"event": "action", "data": {"type": "openTour", "slug": "aurora", "section": "tour"}},
     {"event": "done", "data": {}}
   ],
+  "retract_unverified": [
+    {"event": "text_delta", "data": {"text": "도쿄 공연은 "}},
+    {"event": "text_delta", "data": {"text": "3월이에요."}},
+    {"event": "retract", "data": {"reason": "unverified"}},
+    {"event": "done", "data": {}}
+  ],
   "requests": [
     {"requestId": "r1", "sessionId": "s1", "locale": "ko", "message": "AURORA 보여줘", "context": {"view": "orbit"}},
     {"requestId": "r2", "sessionId": "s1", "locale": "ko", "message": "투어 일정 보여줘", "context": {"view": "tour", "slug": "aurora", "section": "album"}},

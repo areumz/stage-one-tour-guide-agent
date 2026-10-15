@@ -34,6 +34,12 @@ on-stage 에서 이 프로젝트가 실제로 쓰는 계약만 옮겨 둔 폴더
 2. 계약 갱신 태스크만 on-stage 를 읽을 수 있다. 읽은 뒤 이 README 의 출처 행과 해당 파일을 함께 고친다.
 3. fixtures/ 의 골든 벡터는 임의로 고치지 않는다.
 
+## 변경 기록
+
+| 날짜 | 변경 |
+| --- | --- |
+| 2026-10-15 | 3단계 가드레일: `retract`(reason `unverified`)된 턴은 action 을 보내지 않고 순서는 `text_delta... → retract → done`. `ui_actions.md`, `fixtures/guide_events_sample.json`(`retract_unverified`) 갱신. 새 이벤트 타입 없음 |
+
 ## 알려진 공백 (on-stage 의 현재 동작)
 
 | 사실 | 영향 |

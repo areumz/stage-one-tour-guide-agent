@@ -42,3 +42,19 @@ def test_non_integer_env_names_variable(name):
 def test_wildcard_origin_rejected():
     with pytest.raises(ValueError):
         Settings.from_env({"ONSTAGE_URL": "https://example.com", "ALLOWED_ORIGINS": "*"})
+
+
+def test_classifier_and_temperature_defaults_and_overrides():
+    s = Settings.from_env({"ONSTAGE_URL": "https://example.com"})
+    assert (s.classifier_model, s.openai_temperature) == ("gpt-4.1-mini", None)
+    s = Settings.from_env(
+        {"ONSTAGE_URL": "https://example.com", "CLASSIFIER_MODEL": "x", "OPENAI_TEMPERATURE": "0.2"}
+    )
+    assert (s.classifier_model, s.openai_temperature) == ("x", 0.2)
+    s = Settings.from_env({"ONSTAGE_URL": "https://example.com", "OPENAI_TEMPERATURE": ""})
+    assert s.openai_temperature is None
+
+
+def test_invalid_temperature_raises():
+    with pytest.raises(ValueError, match="OPENAI_TEMPERATURE"):
+        Settings.from_env({"ONSTAGE_URL": "https://example.com", "OPENAI_TEMPERATURE": "hot"})
