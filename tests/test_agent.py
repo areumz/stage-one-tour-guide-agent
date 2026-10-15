@@ -4,7 +4,16 @@ from types import SimpleNamespace
 
 import pytest
 from agents import RunContextWrapper
-from contracts.guide_events import Done, GuideRequest, TextDelta, ToolStatus, ViewContext
+from contracts.guide_events import (
+    ActionEvent,
+    Done,
+    FocusArtist,
+    GuideRequest,
+    OpenTour,
+    TextDelta,
+    ToolStatus,
+    ViewContext,
+)
 from openai.types.responses import ResponseTextDeltaEvent
 
 from tests.conftest import MINI_RAW, TODAY
@@ -14,6 +23,7 @@ from tour_guide.agent import (
     get_artist_json,
     list_artists_json,
     map_stream_event,
+    record_action_json,
     search_shows_json,
     stream_guide,
 )
@@ -45,9 +55,72 @@ async def test_json_wrappers_return_data_or_error():
     assert "error" in bad_city
 
 
-async def test_agent_has_three_tools_and_dynamic_prompt():
+async def test_record_action_sets_context_and_last_call_wins():
+    ctx = GuideContext(locale="ko", view=None)
+    first = json.loads(await record_action_json(make_cache(), ctx, "focusArtist", "aurora"))
+    assert first == {"ok": True}
+    assert ctx.action == FocusArtist(slug="aurora")
+    await record_action_json(make_cache(), ctx, "openTour", "velvet")
+    assert ctx.action == OpenTour(slug="velvet")  # 마지막 호출만 남는다
+    assert ctx.action_calls == 2
+
+
+async def test_record_action_rejects_unknown_slug_and_keeps_previous():
+    ctx = GuideContext(locale="ko", view=None)
+    bad = json.loads(await record_action_json(make_cache(), ctx, "focusArtist", "nobody"))
+    assert "error" in bad
+    assert ctx.action is None
+    assert ctx.action_calls == 0
+    await record_action_json(make_cache(), ctx, "focusArtist", "aurora")
+    await record_action_json(make_cache(), ctx, "openTour", "x\ninjected")
+    assert ctx.action == FocusArtist(slug="aurora")  # 잘못된 호출이 앞선 유효한 값을 지우지 않는다
+    assert ctx.action_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("view", "slug", "recorded"),
+    [
+        (ViewContext(view="tour", slug="aurora"), "aurora", False),
+        (ViewContext(view="tour", slug="aurora"), "velvet", True),
+        (ViewContext(view="orbit"), "aurora", True),
+    ],
+)
+async def test_open_tour_skipped_only_when_same_tour_is_open(view, slug, recorded):
+    ctx = GuideContext(locale="ko", view=view)
+    out = json.loads(await record_action_json(make_cache(), ctx, "openTour", slug))
+    assert ctx.action == (OpenTour(slug=slug) if recorded else None)
+    assert ("skipped" in out) is (not recorded)
+    if not recorded:
+        assert "이미 열려 있음" in out["skipped"]
+    assert ctx.action_calls == 1  # 거른 호출도 시도로 센다
+
+
+def test_action_tools_take_only_slug():
     agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
-    assert {t.name for t in agent.tools} == {"listArtists", "getArtist", "searchShows"}
+    tools = {t.name: t for t in agent.tools}
+    for name in ("focusArtist", "openTour"):
+        assert list(tools[name].params_json_schema["properties"]) == ["slug"]  # ctx 는 스키마에 없다
+
+
+@pytest.mark.parametrize("name", ["focusArtist", "openTour"])
+def test_map_tool_called_skips_action_tools(name):
+    ev = SimpleNamespace(
+        type="run_item_stream_event",
+        name="tool_called",
+        item=SimpleNamespace(raw_item=SimpleNamespace(name=name)),
+    )
+    assert map_stream_event(ev) is None
+
+
+async def test_agent_has_five_tools_and_dynamic_prompt():
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
+    assert {t.name for t in agent.tools} == {
+        "listArtists",
+        "getArtist",
+        "searchShows",
+        "focusArtist",
+        "openTour",
+    }
     ctx = RunContextWrapper(context=GuideContext(locale="en", view=None))
     prompt = await agent.get_system_prompt(ctx)
     assert "기본 응답 언어: en" in prompt       # 기본 응답 언어
@@ -106,6 +179,27 @@ async def test_prompt_never_contains_unknown_slug():
     assert "현재 화면: tour/aurora\n" in await agent.get_system_prompt(ok)
 
 
+async def test_prompt_contains_action_rules():
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
+    ctx = RunContextWrapper(
+        context=GuideContext(locale="ko", view=ViewContext(view="orbit"))
+    )
+    prompt = await agent.get_system_prompt(ctx)
+    for needle in (
+        "액션 규칙",
+        "한국어·영어 모두 같은 규칙",
+        "focusArtist(slug)",
+        "openTour(slug)",
+        "이동 결과 표현은 쓰지 않는다",
+        "액션은 답변을 대신하지 않는다",
+        "정보 질문",
+        "여러 아티스트를 다루는 질문",
+        "openTour를 이미 열린 화면에서 다시 호출하지 않는다",
+    ):
+        assert needle in prompt
+    assert "현재 화면: orbit\n" in prompt
+
+
 # ── stream_guide (LLM 없이) ──
 
 
@@ -144,6 +238,24 @@ def _request():
 
 def _patch(monkeypatch, fake):
     monkeypatch.setattr("tour_guide.agent.Runner.run_streamed", lambda *a, **k: fake)
+
+
+def _patch_with_action(monkeypatch, fake, action):
+    """액션 도구가 호출된 것처럼 요청별 컨텍스트에 기록해 둔다."""
+
+    def fake_run(*args, **kwargs):
+        kwargs["context"].action = action
+        kwargs["context"].action_calls = 1
+        return fake
+
+    monkeypatch.setattr("tour_guide.agent.Runner.run_streamed", fake_run)
+
+
+def _text_ev(text):
+    return SimpleNamespace(
+        type="raw_response_event",
+        data=SimpleNamespace(type="response.output_text.delta", delta=text),
+    )
 
 
 def _msgs(caplog):
@@ -232,3 +344,29 @@ async def test_stream_guide_cancel_logged_even_if_sdk_marks_complete(monkeypatch
     msgs = _msgs(caplog)
     assert msgs.count("guide cancelled requestId=r1") == 1
     assert not any(m.startswith("guide done") for m in msgs)
+
+
+async def test_stream_guide_emits_action_after_text_and_before_done(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="tour_guide.agent")
+    fake = FakeResult([_tool_ev("searchShows"), _text_ev("서울 공연은 "), _text_ev("12월이에요.")])
+    _patch_with_action(monkeypatch, fake, FocusArtist(slug="aurora"))
+    events = [e async for e in stream_guide(object(), _request())]
+    assert events == [
+        ToolStatus(tool="searchShows", key="tool.searchShows"),
+        TextDelta(text="서울 공연은 "),
+        TextDelta(text="12월이에요."),
+        ActionEvent(action=FocusArtist(slug="aurora")),
+        Done(),
+    ]
+    assert any("action_calls=1" in m for m in _msgs(caplog))
+
+
+async def test_stream_guide_error_after_action_recorded_emits_no_action(monkeypatch):
+    fake = FakeResult([_text_ev("가장 가까운 공연은 ")], error=RuntimeError("boom"))
+    _patch_with_action(monkeypatch, fake, OpenTour(slug="aurora"))
+    seen = []
+    with pytest.raises(RuntimeError):
+        async for e in stream_guide(object(), _request()):
+            seen.append(e)
+    assert seen == [TextDelta(text="가장 가까운 공연은 ")]
+    assert not any(isinstance(e, ActionEvent) for e in seen)
