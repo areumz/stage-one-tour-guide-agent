@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+.env
+.env.*
+!.env.example
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
+docs
+scripts
+.superpowers
+detail-*.md
+Dockerfile
+.dockerignore
