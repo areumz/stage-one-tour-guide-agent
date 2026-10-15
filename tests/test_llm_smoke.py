@@ -84,3 +84,15 @@ async def test_comparison_question_emits_no_action():
     assert actions(events) == []
     text = "".join(e.text for e in events if isinstance(e, TextDelta))
     assert text  # 답변은 항상 표시된다
+
+
+async def test_open_tour_from_other_section_scrolls_to_tour():
+    view = ViewContext(view="tour", slug="aurora", section="album")
+    events = await collect("AURORA 투어 일정 보여줘", "ko", view)
+    assert actions(events) == [OpenTour(slug="aurora")]
+
+
+async def test_open_tour_not_repeated_on_tour_section():
+    view = ViewContext(view="tour", slug="aurora", section="tour")
+    events = await collect("AURORA 투어 열어줘", "ko", view)
+    assert actions(events) == []

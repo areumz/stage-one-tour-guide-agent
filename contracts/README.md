@@ -12,6 +12,7 @@ on-stage 에서 이 프로젝트가 실제로 쓰는 계약만 옮겨 둔 폴더
 | 커밋 | e57361ae88a497bf25857a1ce2414862d84df841 |
 | 추출일 | 2026-10-13 |
 | 응답 확인 | https://on-stage-nine.vercel.app/api/artists |
+| 재확인 | 2026-10-15 on-stage 통지: 위 커밋 이후 `types.ts`·`data.ts`·`api/artists/route.ts` 변경은 export 1줄뿐이라 응답 모양은 같다. 필드별 대조는 하지 않았다 |
 
 ## 파일
 
@@ -41,3 +42,4 @@ on-stage 에서 이 프로젝트가 실제로 쓰는 계약만 옮겨 둔 폴더
 | 전체 공연을 읽는 GET 엔드포인트가 없다 (`/api/shows` 는 POST 전용) | 에이전트는 `cities[]` 만 검색한다. 엔드포인트가 생기면 계약 갱신 후 `load_shows` 를 바꾼다 |
 | `news` 는 고정 문자열이라 D-n 표현이 날짜와 맞지 않을 수 있다 | 날짜 근거로 쓰지 않고 `cities[].date` 로 계산한다 |
 | `cities[].name` 은 한국어다 | 영문 도시명 별칭이 필요한지 확인한다 (설계 §12 #10) |
+| `stats.tracks` 는 `artists.stat_tracks` 컬럼 값이라 `tracks.length` 와 다를 수 있다 (실제 응답: aurora 8 vs 4) | **해결 (2026-10-15):** 도시와 같은 규칙. 곡 수는 `totalTracks`(= `stats.tracks`), 목록은 `featuredTracks`("대표 곡")로 구분해 반환한다 (artist_context.md) |

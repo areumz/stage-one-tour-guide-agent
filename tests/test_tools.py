@@ -1,7 +1,13 @@
+import json
+from pathlib import Path
+
 import pytest
+from contracts.artists import ArtistsResponse
 
 from tests.conftest import TODAY
 from tour_guide.tools import ToolInputError, get_artist, list_artists, search_shows
+
+GOLDEN = Path(__file__).resolve().parents[1] / "contracts" / "fixtures" / "artists_response.json"
 
 
 def test_list_artists_next_show(artists):
@@ -25,7 +31,17 @@ def test_get_artist_uses_stats_for_total_and_cities_for_list(artists):
     assert r["totalCities"] == 26
     assert [c["cityCode"] for c in r["featuredCities"]] == ["LA", "SEO", "TYO"]
     assert r["featuredCities"][0]["daysUntil"] < 0  # 지난 공연은 음수
-    assert r["tracks"] == ["Dawn Chorus", "Glass Tide"]
+    assert r["totalTracks"] == 2  # stats.tracks
+    assert r["featuredTracks"] == ["Dawn Chorus", "Glass Tide"]
+
+
+def test_get_artist_total_tracks_differs_from_listed_tracks_in_real_response():
+    raw = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    real = ArtistsResponse.model_validate(raw).artists
+    r = get_artist(real, "aurora", TODAY)
+    assert r["totalTracks"] == 8
+    assert len(r["featuredTracks"]) == 4
+    assert "tracks" not in r  # 목록은 "대표 곡"이라는 이름으로만 노출한다
 
 
 def test_get_artist_unknown_slug(artists):

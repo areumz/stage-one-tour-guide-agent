@@ -57,7 +57,9 @@ def get_artist(artists: list[Artist], slug: str, today: date) -> dict:
         "totalCities": a.stats.cities,
         "countries": a.stats.countries,
         "featuredCities": [_show_dict(a, s, today) for s in shows],
-        "tracks": [t.title for t in a.tracks],
+        # 도시와 같은 규칙: 수는 stats.tracks, 목록은 공개된 "대표 곡"만
+        "totalTracks": a.stats.tracks,
+        "featuredTracks": [t.title for t in a.tracks],
         "news": a.news,
     }
 

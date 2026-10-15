@@ -24,6 +24,10 @@
 
 - `stats.cities` = `shows` 테이블의 해당 아티스트 전체 행 수
 - `cities[]` = 그중 `featured = true` 인 공연 (A탭 투어 오빗 노출 대상)
+- `stats.countries` = 국가 중복 제거 수
+- `stats.tracks` = `artists.stat_tracks` 컬럼 값. **`tracks[]` 길이와 다를 수 있다** (실제 응답: aurora 8 vs 4, velvet 6 vs 3). **곡 수 규칙 (도시와 같다):** `getArtist` 는 `stats.tracks` 를 `totalTracks` 로, `tracks[]` 의 제목 목록을 `featuredTracks` 로 구분해 돌려준다. "몇 곡이야?" 는 `totalTracks` 로 답하고, 곡 목록은 "대표 곡"이라고 밝혀 말하며 전체 목록처럼 말하지 않는다
+- `cities[].date` = DB `show_date` 그대로(YYYY-MM-DD), `cities[].name` = `city_name`(한국어)
+- 응답의 모든 필드는 non-null 이다. 비어 있을 수 있는 DB 컬럼은 on-stage 변환 단계에서 `""` 로 바뀐다 (2026-10-15 on-stage 통지)
 
 ## 응답
 
@@ -32,4 +36,4 @@
 | `GET /api/artists` | `{ "artists": Artist[] }` |
 | `GET /api/artists?slug=<slug>` | `{ "artist": Artist }` (404 `{ "error": "not found" }`) |
 
-`gallery`, `shader`, `color`, `initials`, `orbit`, `angle`, `size` 는 에이전트가 쓰지 않는다.
+`gallery`, `shader`, `color`, `initials`, `orbit`, `angle`, `size` 는 에이전트가 쓰지 않는다. 에이전트의 Pydantic 모델은 모르는 필드를 **무시한다** (`extra` 기본값). 실제 응답 fixture 가 이 필드들을 포함한 채 파싱된다.

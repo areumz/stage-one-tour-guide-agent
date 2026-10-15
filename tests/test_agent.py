@@ -95,6 +95,30 @@ async def test_open_tour_skipped_only_when_same_tour_is_open(view, slug, recorde
     assert ctx.action_calls == 1  # 거른 호출도 시도로 센다
 
 
+@pytest.mark.parametrize(
+    ("section", "recorded"),
+    [
+        ("tour", False),  # 이미 투어 섹션이면 거른다
+        (None, False),  # 섹션을 모르면 이전 동작(이미 투어 화면)
+        ("hero", True),  # 다른 섹션이면 투어 섹션으로 이동해야 한다
+        ("album", True),
+        ("gallery", True),
+    ],
+)
+async def test_open_tour_filter_depends_on_current_section(section, recorded):
+    ctx = GuideContext(locale="ko", view=ViewContext(view="tour", slug="aurora", section=section))
+    out = json.loads(await record_action_json(make_cache(), ctx, "openTour", "aurora"))
+    assert ctx.action == (OpenTour(slug="aurora") if recorded else None)
+    assert ("skipped" in out) is (not recorded)
+    assert ctx.action_calls == 1
+
+
+async def test_section_is_ignored_outside_tour_view():
+    ctx = GuideContext(locale="ko", view=ViewContext(view="orbit", section="tour"))
+    await record_action_json(make_cache(), ctx, "openTour", "aurora")
+    assert ctx.action == OpenTour(slug="aurora")
+
+
 def test_action_tools_take_only_slug():
     agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
     tools = {t.name: t for t in agent.tools}
@@ -177,6 +201,21 @@ async def test_prompt_never_contains_unknown_slug():
         context=GuideContext(locale="ko", view=ViewContext(view="tour", slug="aurora"))
     )
     assert "현재 화면: tour/aurora\n" in await agent.get_system_prompt(ok)
+
+
+@pytest.mark.parametrize(
+    ("view", "expected"),
+    [
+        (ViewContext(view="tour", slug="aurora", section="album"), "현재 화면: tour/aurora/album\n"),
+        (ViewContext(view="tour", slug="aurora"), "현재 화면: tour/aurora\n"),
+        (ViewContext(view="tour", section="album"), "현재 화면: tour\n"),  # slug 없으면 섹션도 생략
+        (ViewContext(view="orbit", section="tour"), "현재 화면: orbit\n"),  # tour 일 때만 의미가 있다
+    ],
+)
+async def test_prompt_screen_includes_section_only_for_tour_with_known_slug(view, expected):
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
+    ctx = RunContextWrapper(context=GuideContext(locale="ko", view=view))
+    assert expected in await agent.get_system_prompt(ctx)
 
 
 async def test_prompt_contains_action_rules():
