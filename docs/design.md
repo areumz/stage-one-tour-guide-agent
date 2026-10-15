@@ -1,6 +1,6 @@
 # 투어 가이드 에이전트 설계 문서
 
-2026-10-13 · 상태: 브레인스토밍 결과 (구현 계획 전). 2026-10-15: 3단계 가드레일 설계 보완, 4단계 세션·`highlightCity` 설계 제안
+2026-10-13 · 상태: 브레인스토밍 결과 (구현 계획 전). 2026-10-15: 3단계 가드레일 설계 보완, 4단계 세션·`highlightCity` 설계 확정
 출발점: [stage-one-tour-guide-agent-proposal.md](stage-one-tour-guide-agent-proposal.md) (이하 기획서)
 
 ## 1. 목적과 범위
@@ -77,7 +77,7 @@ FastAPI (Cloud Run, 인스턴스 1대)
 | `text_delta` | `{ text }` | 스트리밍 답변 |
 | `action` | `{ type, ...payload }` (답변 끝에 한 번. **`retract`된 턴에서는 보내지 않는다**) | "궤도 카메라가 AURORA로 이동했어요" |
 | `retract` | `{ reason }` (출력 검사 실패 시 프런트가 말풍선을 고정 문구로 교체. MVP의 `reason`은 `unverified` 하나. §6.2) | "확인되지 않은 정보는 답하지 않아요" |
-| `error` | `{ code }` (`rate_limited`, `off_topic`, `too_long`, `busy`(4단계), `session_limit`(4단계, 제안 §7.3), `upstream`, `internal`) | 한도·오류 상태 |
+| `error` | `{ code }` (`rate_limited`, `off_topic`, `too_long`, `busy`(4단계), `session_limit`(4단계, §7.3), `upstream`, `internal`) | 한도·오류 상태 |
 | `done` | `{}` | 입력창 복귀 |
 
 스트림 순서는 정상 `text_delta… → action? → done`, 출력 검사 실패 `text_delta… → retract → done`(action 없음), 오류 `error`(종료, `done` 없음)다. `retract` 뒤에도 입력창이 돌아오도록 `done`을 보낸다.
@@ -217,6 +217,8 @@ FastAPI (Cloud Run, 인스턴스 1대)
 
 측정 결과(2026-10-15, `gpt-4.1-mini`, orbit, 8회씩, 프롬프트 보정 ①②만 적용, 서버 힌트 ③ 불필요): "AURORA 투어 일정 보여줘" `openTour` 8/8, "오로라 투어 보여줘" `openTour` 8/8, "오로라 알려줘" `focusArtist` 8/8, "aurora 알려줘" `focusArtist` 8/8, 대조군 "서울에서 누가 공연해?" 액션 없음 8/8. 한 번의 측정이므로 모델·프롬프트를 바꾸면 `scripts/measure_actions.py`로 다시 잰다.
 
+4단계 측정 결과(2026-10-16, `gpt-4.1-mini`, 8회씩, 프롬프트에 "먼저 도구 조회, 그다음 액션"과 동사·대상 기준 결정표를 반영한 뒤): 위 5문장은 모두 8/8. 투어 페이지(`tour/aurora`)의 "도쿄 공연은 언제 해?"는 `highlightCity(aurora, TYO)` 8/8. 궤도 화면의 "AURORA 도쿄 공연은 언제 해?"는 `highlightCity`가 나가지 않고 `focusArtist(aurora)` 7/8 (결정표 1번, 단일 아티스트 정보 질문). 같은 시점의 스모크 LLM 테스트(`tests/test_llm_smoke.py` 10개)는 3회 모두 통과했다. 보정 전에는 모델이 조회 도구를 건너뛰고 액션만 부르는 경우가 3단계 머지본에서도 재현됐다 (프롬프트의 "두 의도가 섞이면 투어 페이지 쪽을 따른다" 문장과 결정표 예시가 원인으로 추정).
+
 ### 6.5 테스트 세트 (3단계)
 
 | 층 | 방법 | 기준 |
@@ -258,7 +260,9 @@ FastAPI (Cloud Run, 인스턴스 1대)
 
 B를 채택하는 근거: 중복 턴은 "`done` 정상 종료 시에만 히스토리 커밋" 규칙으로 막히고, 같은 세션의 동시 요청은 4단계부터 `busy`로 막힌다. 남는 비용은 재시도 과금뿐이고 이는 한도로 제한된다. 필요해지면 A로 올린다.
 
-### 7.3 4단계 설계
+### 7.3 4단계 설계 (확정, 2026-10-15)
+
+이 절의 결정은 확정이며 구현 계획은 `docs/superpowers/plans/tour-guide-agent-stage4-session.md`이다. 확정한 다섯 가지: (1) 턴 상한은 새 `session_limit` 코드, (2) `highlightCity`는 `tour/<slug>`에서만, (3) busy 안전망은 120초, (4) L3는 직전 사용자 질문을 함께 받음, (5) 출력 검사는 히스토리의 도시를 허용.
 
 요청 처리 순서 (`api`의 `events()`):
 
@@ -267,7 +271,7 @@ L0 길이 → L1 IP 한도 → 데이터 → 세션 턴 상한 → L2 규칙 →
   → 에이전트 실행(히스토리 포함) → done이면 커밋 → finally에서 busy 해제
 ```
 
-| 항목 | 제안 |
+| 항목 | 확정 |
 | --- | --- |
 | 저장소 | `limits.py`에 `SessionStore`를 둔다 (§3 표대로). `OrderedDict`를 마지막 사용 순으로 유지한다. 만료·초과는 오래된 쪽(앞)부터 제거하고 진행 중인 세션은 건너뛴다. 이벤트 루프가 하나라 "확인 → 표시" 사이에 `await`만 없으면 락이 필요 없다 |
 | 세션 값 | `history`(최근 6턴, 텍스트만), `committed_turns`(커밋된 턴 수), `in_flight_since`(진행 중 표시 시각) |
@@ -275,10 +279,10 @@ L0 길이 → L1 IP 한도 → 데이터 → 세션 턴 상한 → L2 규칙 →
 | 히스토리 주입 | Runner 입력을 `[이전 메시지…, 현재 질문]` 목록으로 보낸다. 지시문은 그대로 두어(동적 값이 뒤) 앞부분 캐시를 유지한다. **구현 첫 작업으로 SDK가 assistant 텍스트 메시지와 목록 입력의 입력 가드레일을 의도대로 처리하는지 스파이크로 확인한다** |
 | L2·L3 | L2는 현재 메시지만 본다. L3 분류기는 현재 메시지와 **직전 사용자 질문 하나**를 받는다(전체 히스토리 아님. 비용·주입 면적을 줄이고, "그다음엔?" 같은 후속 질문을 덜 오탐한다). 지금 `l3_classifier`는 목록 입력이 오면 통째로 직렬화하므로 수정이 필요하다 |
 | 출력 검사 | 허용 도시 = 도구 결과 ∪ 현재 질문 ∪ **히스토리(커밋된 질문·답변)의 도시**. 커밋된 답변은 이미 검사를 통과한 것이라 믿어도 되고, 빼면 "거기 몇 시야?"처럼 도구 없이 되묻는 답이 오탐으로 `retract`된다 |
-| 턴 상한 | 커밋된 턴이 20 이상이면 새 요청을 `session_limit`으로 거절한다 (제안: **새 코드 값**, 새 이벤트 타입은 아님). 대안은 `rate_limited` 재사용인데, 사용자에게 "새 대화를 시작하라"고 안내하지 못한다 |
+| 턴 상한 | 커밋된 턴이 20 이상이면 새 요청을 `session_limit`으로 거절한다 (**새 코드 값**, 새 이벤트 타입은 아님). 대안은 `rate_limited` 재사용인데, 사용자에게 "새 대화를 시작하라"고 안내하지 못한다 |
 | busy | 같은 세션에 진행 중 표시가 있으면 `busy`. 표시는 `events()`의 `finally`에서 해제한다. 안전망으로 120초가 지난 표시는 무시한다(해제 누락 버그가 있어도 세션이 영구히 막히지 않게) |
 | 한도 순서 | IP 한도가 먼저다(모든 요청이 한도에 센다). `busy`는 L2 뒤, 실행 직전이다. L2 차단·L3 차단 요청은 턴 수에 세지 않는다 |
-| `highlightCity` | 도구 `highlightCity(slug, city)`. `slug`는 enum, `city`는 **그 아티스트의 `load_shows` 도시 코드 안에** 있어야 한다(다른 아티스트의 도시는 기록하지 않고 오류를 돌려 스스로 고치게 한다). 한 답변에 액션 하나(기존 규칙). 호출 규칙(제안): 현재 화면이 `tour/<그 slug>`이고 특정 도시를 가리킬 때만. 그 밖에는 `openTour`·`focusArtist`. 순서는 `text_delta… → action → done`이고 `retract` 턴에서는 보내지 않는다. 화면 연출은 on-stage가 정한다 |
+| `highlightCity` | 도구 `highlightCity(slug, city)`. `slug`는 enum, `city`는 **그 아티스트의 `load_shows` 도시 코드 안에** 있어야 한다(다른 아티스트의 도시는 기록하지 않고 오류를 돌려 스스로 고치게 한다). 한 답변에 액션 하나(기존 규칙). 호출 규칙: 현재 화면이 `tour/<그 slug>`이고 특정 도시를 가리킬 때만. 그 밖에는 `openTour`·`focusArtist`. 순서는 `text_delta… → action → done`이고 `retract` 턴에서는 보내지 않는다. 화면 연출은 on-stage가 정한다 |
 | KO\|EN | 빠진 곳은 없다(`locale` 요청 필드, 지시문, L2 영문 매칭, 출력 검사 영문 별칭, 분류기). 추가는 테스트만: 영어 후속 질문, 영어 `highlightCity` |
 | 추천 칩 | 에이전트 쪽 변경은 없다. 칩 문구도 일반 요청이라 L2/L3를 통과해야 하고 IP 한도·20턴에 센다. on-stage에서 칩 문구 목록을 받아 회귀 테스트에 넣는다 |
 
@@ -460,7 +464,7 @@ on-stage에 요청할 정리 (선택, 에이전트는 정리 전에도 동작):
 | R3 | 분류기 실패는 기존 `upstream`이다. 추가 요청 없음 | §6.1 |
 | R4 | 이 저장소 쪽: `contracts/ui_actions.md`에 "`retract`된 턴도 action을 보내지 않는다" 추가, `fixtures/guide_events_sample.json`에 `retract` 샘플(`reason: "unverified"`)과 순서 샘플 추가 | §6.2 |
 
-### 14.6 계약 갱신 요청 (4단계, 제안)
+### 14.6 계약 갱신 요청 (4단계, 2026-10-15 on-stage에 전달함)
 
 | # | 요청 | 근거 |
 | --- | --- | --- |

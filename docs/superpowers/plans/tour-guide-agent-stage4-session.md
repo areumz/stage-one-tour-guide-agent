@@ -95,7 +95,7 @@
 ### Task 5: `api` 배선 — 턴 상한, busy, 커밋, 해제
 
 - **수정:** `src/tour_guide/api.py`, `src/tour_guide/main.py`, `tests/test_api.py`, (필요 시) `tests/test_main.py`
-- **인터페이스:** `create_app(settings, cache, limiter, sessions, run_guide)`. `run_guide(req, needs_classifier, history)`. 연결 끊김 테스트용으로 `events()`를 직접 만들 수 있는 훅 하나를 앱에 둔다 (운영 경로와 같은 함수).
+- **인터페이스:** `create_app(settings, cache, limiter, sessions, run_guide)`. `run_guide(req, needs_classifier, history)`. `SessionStore.try_acquire`는 토큰 또는 `None`을 돌려주고 `release`는 토큰을 받아, 오래 걸린 요청의 늦은 해제가 새 요청의 표시를 지우지 않게 한다. 연결 끊김 테스트는 라우트 함수를 직접 불러 얻은 응답 본문 제너레이터를 닫아 확인한다 (테스트 전용 훅을 운영 코드에 두지 않는다).
 - **동작 규칙:** 길이 → IP 한도 → 데이터 → 턴 상한(`session_limit`) → L2(`off_topic`) → `busy` 획득 → 히스토리 읽기 → 에이전트 실행 순서다. 스트림을 지나가면서 `text_delta`를 모으고 `retract`를 기록하며, `done`을 만나면 `retract`가 없고 답변이 비어 있지 않을 때만 커밋한 뒤 `done`을 내보낸다. 모든 경로의 `finally`에서 해제한다. 예외는 `upstream`으로 바꾼다.
 - **테스트:** `done` 턴 커밋과 다음 요청의 히스토리, `retract`·오류·빈 답변·L2 차단은 커밋하지 않음, 턴 상한 거절(에이전트 미호출), 진행 중이면 `busy`이고 해제 뒤 정상, 정상·오류·`retract`·예외 후 모두 표시 해제, 연결이 끊겨 제너레이터가 닫히면 해제되고 커밋되지 않음
 - **완료 기준:** `pytest` 통과
@@ -103,7 +103,7 @@
 ### Task 6: LLM 확인과 칩 회귀 테스트 틀
 
 - **수정:** `tests/test_llm_session.py`, `tests/test_chips.py`(생성), `scripts/measure_actions.py`
-- **동작 규칙:** 케이스 튜플에 화면 컨텍스트를 넣고 `highlightCity` 행(투어 페이지, "도쿄 공연은 언제 해?", 기준 6/8)과 궤도 화면 대조군을 추가한다. 대조군의 정확한 기대는 첫 실행 결과를 보고 사용자와 정한다 (궤도에서는 `openTour`가 정당할 수 있다). 칩 테스트는 `contracts/fixtures/chips.json`이 있을 때만 돌고, 각 문구가 길이 상한과 L2 차단을 통과하는지 본다.
+- **동작 규칙:** 케이스 튜플에 화면 컨텍스트를 넣고 `highlightCity` 행(투어 페이지, "도쿄 공연은 언제 해?", 기준 6/8)과 궤도 화면 대조군을 추가한다. 궤도 대조군("AURORA 도쿄 공연은 언제 해?")의 기대는 첫 실행 결과로 `focusArtist(aurora)`(기준 6/8)로 정했다. 이 행이 지키는 것은 궤도에서 `highlightCity`가 나가지 않는다는 점이다. 칩 테스트는 `contracts/fixtures/chips.json`이 있을 때만 돌고, 각 문구가 길이 상한과 L2 차단을 통과하는지 본다.
 - **테스트:** 투어 페이지의 도시 질문이 `highlightCity(aurora, TYO)` (3회 중 2회), 궤도의 도시 질문은 `highlightCity`가 나가지 않음 (3회 모두)
 - **완료 기준:** 사용자 승인 후 `pytest -m llm tests/test_llm_session.py`와 `scripts/measure_actions.py`에서 기존 5문장이 회귀하지 않고 `highlightCity` 행이 6/8 이상. 실패하면 프롬프트를 고치고 기대값은 고치지 않는다.
 

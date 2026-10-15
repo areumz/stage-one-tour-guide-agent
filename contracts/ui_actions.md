@@ -19,13 +19,19 @@
 | --------------- | -------------------------------------------------------------- | ------------------------- |
 | `focusArtist`   | `{ slug }`                                                     | 2b (지금)                 |
 | `openTour`      | `{ slug, section? }` (에이전트는 당분간 `section` 을 생략한다) | 2b (지금)                 |
-| `highlightCity` | `{ slug, city }`                                               | 4단계. 아직 보내지 않는다 |
+| `highlightCity` | `{ slug, city }`                                               | 4단계 (지금)              |
 
 - 답변 텍스트가 끝난 뒤, `done` 앞에 **한 번만** 보낸다. 순서는 `text_delta... → action → done` 이다.
 - 에러·취소로 끝나는 요청에서는 보내지 않는다.
 - `retract` 된 턴도 action 을 보내지 않는다. 순서는 `text_delta... → retract → done` 이다.
 - `slug` 는 서버가 `/api/artists` 로 만든 enum 으로 검증한 값만 보낸다. 한 답변에서 여러 번 호출되려 하면 마지막 유효한 것 하나만 보낸다.
 - 액션 도구 호출은 `tool_status` 로 보내지 않는다. 프런트 사전에 `tool.focusArtist`, `tool.openTour` 키를 추가하지 않아도 된다.
+
+## 서버의 `highlightCity` 규칙
+
+- `slug` 는 enum 으로, `city` 는 **그 아티스트의 공연 도시 코드**(`cities[].code`) 안에 있을 때만 보낸다. 다른 아티스트의 도시는 보내지 않는다.
+- 현재 화면이 그 아티스트의 투어 페이지(`context.view="tour"`, 같은 `slug`)일 때만 보낸다. 그 밖의 화면에서는 `openTour`·`focusArtist` 를 쓴다. 이 조건은 on-stage 가 `highlightCity` 를 지원하는 화면을 알려 주면 바뀐다 (설계 §14.6 H3).
+- 한 답변에 액션은 하나다. `retract` 된 턴에서는 보내지 않는다. 순서는 `text_delta... → action → done`.
 
 ## 서버의 `openTour` 중복 필터
 
@@ -49,7 +55,7 @@
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | 섹션 값 목록                 | **확정:** `hero`, `tour`, `album`, `gallery`. `openTour.section` 도 같은 값이며 생략하면 `tour`                   |
 | 연출 순서, 자동 이동/칩 방식 | on-stage 가 결정한다. 에이전트는 `openTour` 하나만 보낸다                                                         |
-| `highlightCity`              | 4단계에서 정한다                                                                                                  |
+| `highlightCity`              | 에이전트는 `tour/<slug>`에서만 보낸다. 다른 화면에서 쓸지·연출은 on-stage 가 정해 알려 준다 (설계 §14.6 H3)       |
 
 ## on-stage 가 해야 할 일
 
