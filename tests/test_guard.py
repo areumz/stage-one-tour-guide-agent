@@ -87,3 +87,25 @@ def test_check_output_code_uppercase_only_and_word_boundary():
 
 def test_check_output_no_cities_passes():
     assert check_output("찾지 못했어요", set(), TABLE) is True
+
+
+# ── 근거 없는 날짜 표현 ──
+
+
+@pytest.mark.parametrize(
+    ("text", "message", "expected"),
+    [
+        ("공연은 2026년 12월 5일입니다.", "런던 공연은?", True),
+        ("공연은 2026-12-05 입니다.", "런던 공연은?", True),
+        ("12월 15일에 해요.", "서울 공연은?", True),
+        ("D-12 남았어요.", "서울 공연은?", True),
+        ("It is on Dec 5.", "When is London?", True),
+        ("네, 12월 15일이 맞아요.", "12월 15일 공연 맞아?", False),
+        ("투어와 공연에 관해 답할 수 있어요.", "뭘 할 수 있어?", False),
+        ("26개 도시에서 공연해요.", "도시 몇 개야?", False),
+    ],
+)
+def test_unsourced_dates(text, message, expected):
+    from tour_guide.guard import unsourced_dates
+
+    assert bool(unsourced_dates(text, message)) is expected
