@@ -37,6 +37,10 @@ class Settings:
     rate_per_ip_daily: int = 30
     global_daily: int = 1000
     tracing_enabled: bool = False
+    session_ttl_seconds: int = 1800
+    session_max: int = 500
+    history_turns: int = 6
+    session_turn_limit: int = 20
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -61,4 +65,8 @@ class Settings:
             rate_per_ip_daily=_int_env(e, "RATE_PER_IP_DAILY", "30"),
             global_daily=_int_env(e, "GLOBAL_DAILY", "1000"),
             tracing_enabled=e.get("TRACING_ENABLED", "").lower() in ("1", "true", "yes"),
+            session_ttl_seconds=_int_env(e, "SESSION_TTL_SECONDS", "1800"),
+            session_max=_int_env(e, "SESSION_MAX", "500"),
+            history_turns=_int_env(e, "HISTORY_TURNS", "6"),
+            session_turn_limit=_int_env(e, "SESSION_TURN_LIMIT", "20"),
         )

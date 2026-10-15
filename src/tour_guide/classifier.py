@@ -14,7 +14,8 @@ log = logging.getLogger("tour_guide.classifier")
 
 TIMEOUT_SECONDS = 4
 
-INSTRUCTIONS = """너는 투어 가이드 챗봇의 입력 분류기다. 사용자 메시지 하나만 보고 allow 또는 block 으로 판정한다.
+INSTRUCTIONS = """너는 투어 가이드 챗봇의 입력 분류기다. 사용자 메시지를 보고 allow 또는 block 으로 판정한다.
+메시지에 `[이전 질문]`이 있으면 `[현재 질문]`의 맥락을 읽는 데만 쓰고, 판정 대상은 항상 `[현재 질문]`이다. 이전 질문이 투어 주제면 짧은 후속 질문은 allow 한다.
 
 block (category):
 - off_topic: 투어·공연과 무관한 주제 (음식, 날씨, 코딩, 일반 상식, 번역·글쓰기 대행)

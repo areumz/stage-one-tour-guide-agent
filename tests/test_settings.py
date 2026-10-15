@@ -58,3 +58,18 @@ def test_classifier_and_temperature_defaults_and_overrides():
 def test_invalid_temperature_raises():
     with pytest.raises(ValueError, match="OPENAI_TEMPERATURE"):
         Settings.from_env({"ONSTAGE_URL": "https://example.com", "OPENAI_TEMPERATURE": "hot"})
+
+
+def test_session_settings_defaults_and_overrides():
+    s = Settings.from_env({"ONSTAGE_URL": "https://x.test"})
+    assert (s.session_ttl_seconds, s.session_max, s.history_turns, s.session_turn_limit) == (1800, 500, 6, 20)
+    s = Settings.from_env(
+        {
+            "ONSTAGE_URL": "https://x.test",
+            "SESSION_TTL_SECONDS": "60",
+            "SESSION_MAX": "10",
+            "HISTORY_TURNS": "3",
+            "SESSION_TURN_LIMIT": "5",
+        }
+    )
+    assert (s.session_ttl_seconds, s.session_max, s.history_turns, s.session_turn_limit) == (60, 10, 3, 5)

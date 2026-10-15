@@ -141,3 +141,21 @@ def test_request_strips_and_validates():
 def test_unknown_action_type_rejected():
     with pytest.raises(ValidationError):
         parse_event("action", {"type": "teleport", "slug": "aurora"})
+
+
+@pytest.mark.parametrize("name", ["error_session_limit", "error_busy"])
+def test_limit_error_streams_end_with_error_and_no_done(name):
+    parsed = _parse_stream(name)
+    assert isinstance(parsed[-1], ErrorEvent)
+    assert not any(isinstance(p, Done) for p in parsed)
+
+
+def test_session_limit_code_is_part_of_error_code():
+    assert parse_event("error", {"code": "session_limit"}) == ErrorEvent(code="session_limit")
+
+
+def test_highlight_city_stream_order_and_payload():
+    parsed = _parse_stream("success_highlight_city")
+    assert [type(p) for p in parsed] == [ToolStatus, TextDelta, ActionEvent, Done]
+    assert parsed[2].action.type == "highlightCity"
+    assert (parsed[2].action.slug, parsed[2].action.city) == ("aurora", "TYO")

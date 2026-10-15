@@ -7,7 +7,7 @@ from tour_guide.agent import build_agent, stream_guide
 from tour_guide.api import create_app
 from tour_guide.clock import today_kst
 from tour_guide.data import ArtistsCache, make_http_fetcher
-from tour_guide.limits import RateLimiter
+from tour_guide.limits import RateLimiter, SessionStore
 from tour_guide.settings import Settings
 
 
@@ -35,11 +35,18 @@ def build_app() -> FastAPI:
         temperature=settings.openai_temperature,
         classifier_model=settings.classifier_model,
     )
+    sessions = SessionStore(
+        max_sessions=settings.session_max,
+        ttl_seconds=settings.session_ttl_seconds,
+        history_turns=settings.history_turns,
+        turn_limit=settings.session_turn_limit,
+    )
     return create_app(
         settings=settings,
         cache=cache,
         limiter=limiter,
-        run_guide=lambda req, needs_classifier=False: stream_guide(
-            agent, req, cache, needs_classifier=needs_classifier
+        sessions=sessions,
+        run_guide=lambda req, needs_classifier=False, history=(): stream_guide(
+            agent, req, cache, needs_classifier=needs_classifier, history=history
         ),
     )
