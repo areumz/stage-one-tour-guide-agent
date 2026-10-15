@@ -16,7 +16,8 @@ from tour_guide.sse import to_sse
 
 log = logging.getLogger("tour_guide.api")
 
-RunGuide = Callable[[GuideRequest], AsyncIterator[GuideEvent]]
+# needs_classifier: L2 가 AMBIGUOUS 로 판정해 L3 분류기가 필요한지
+RunGuide = Callable[[GuideRequest, bool], AsyncIterator[GuideEvent]]
 
 
 def client_ip(request: Request, hops: int) -> str:
@@ -66,12 +67,14 @@ def create_app(
             except DataUnavailable:
                 yield ErrorEvent(code="upstream")
                 return
-            # 1단계에는 L3 가 없어 AMBIGUOUS 도 메인 에이전트로 보낸다 (공개 배포 전 3단계 필수)
-            if classify(req.message, build_vocab(artists)) is Verdict.BLOCK:
+            verdict = classify(req.message, build_vocab(artists))
+            if verdict is Verdict.BLOCK:
                 yield ErrorEvent(code="off_topic")
                 return
+            # AMBIGUOUS 만 L3 분류기로 보낸다. 분류기는 메인 에이전트의 입력 가드레일로 돈다
+            needs_classifier = verdict is Verdict.AMBIGUOUS
             try:
-                async with aclosing(run_guide(req)) as stream:
+                async with aclosing(run_guide(req, needs_classifier)) as stream:
                     async for event in stream:
                         yield event
             except Exception as exc:

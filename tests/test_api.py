@@ -32,21 +32,24 @@ def sse_events(text: str):
 class Harness:
     def __init__(self, *, per_minute=100, fail_fetch=False, run_guide=None):
         self.calls = []
+        self.flags = []
 
         async def fetch():
             if fail_fetch:
                 raise RuntimeError("down")
             return MINI_RAW
 
-        async def default_run(req):
+        async def default_run(req, needs_classifier=False):
             self.calls.append(req.message)
+            self.flags.append(needs_classifier)
             yield ToolStatus(tool="getArtist", key="tool.getArtist")
             yield TextDelta(text="안녕")
             yield Done()
 
-        async def counting(req):
+        async def counting(req, needs_classifier=False):
             self.calls.append(req.message)
-            async with aclosing(run_guide(req)) as stream:
+            self.flags.append(needs_classifier)
+            async with aclosing(run_guide(req, needs_classifier)) as stream:
                 async for e in stream:
                     yield e
 
@@ -101,16 +104,23 @@ def test_injection_blocked_before_agent():
     assert h.calls == []
 
 
-def test_ambiguous_reaches_agent_in_stage1():
+def test_ambiguous_reaches_agent_with_classifier_flag():
     h = Harness()
     post(h, message="오늘 점심 뭐 먹지?")
     assert h.calls == ["오늘 점심 뭐 먹지?"]
+    assert h.flags == [True]
+
+
+def test_pass_does_not_request_classifier():
+    h = Harness()
+    post(h)
+    assert h.flags == [False]
 
 
 def test_unknown_section_is_ignored_not_rejected():
     seen = []
 
-    async def run(req):
+    async def run(req, needs_classifier=False):
         seen.append(req.context)
         yield Done()
 
@@ -130,7 +140,7 @@ def test_data_unavailable_is_upstream():
 
 
 def test_agent_exception_is_upstream_error():
-    async def boom(req):
+    async def boom(req, needs_classifier=False):
         raise RuntimeError("openai down")
         yield  # pragma: no cover
 
@@ -192,7 +202,7 @@ def test_stream_headers_disable_buffering_and_caching():
 
 
 def test_partial_stream_then_failure_ends_with_upstream_error():
-    async def partial(req):
+    async def partial(req, needs_classifier=False):
         yield TextDelta(text="안")
         raise RuntimeError("mid-stream")
 
@@ -207,7 +217,7 @@ def test_client_ip_non_positive_hops_uses_socket(hops):
 
 
 def test_agent_failure_log_has_no_user_text(caplog):
-    async def boom(req):
+    async def boom(req, needs_classifier=False):
         raise RuntimeError("secret user text")
         yield  # pragma: no cover
 
@@ -224,7 +234,7 @@ def test_agent_failure_log_has_no_user_text(caplog):
 async def test_closing_response_closes_run_guide():
     closed = asyncio.Event()
 
-    async def run(req):
+    async def run(req, needs_classifier=False):
         try:
             yield TextDelta(text="a")
             yield Done()
@@ -239,3 +249,34 @@ async def test_closing_response_closes_run_guide():
     assert "text_delta" in await anext(it)
     await it.aclose()  # 클라이언트 중단 시 응답 제너레이터가 닫히는 상황
     assert closed.is_set()  # run_guide 의 finally 가 즉시 실행되어야 한다 (GC 에 맡기지 않는다)
+
+
+def test_main_model_exception_surfaces_as_upstream_without_body_in_logs(monkeypatch, caplog):
+    # 선불 잔액 소진 같은 업스트림 오류. 메인 모델 스트림이 임의 예외를 던지는 상황을 흉내 낸다
+    from types import SimpleNamespace
+
+    from tour_guide.agent import stream_guide
+
+    class FakeResult:
+        is_complete = False
+        context_wrapper = SimpleNamespace(usage=SimpleNamespace(input_tokens=0, output_tokens=0))
+
+        async def stream_events(self):
+            raise RuntimeError("insufficient_quota: AURORA 투어 일정 보여줘")
+            yield  # pragma: no cover
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr("tour_guide.agent.Runner.run_streamed", lambda *a, **k: FakeResult())
+
+    def run(req, needs_classifier=False):
+        return stream_guide(object(), req, None, needs_classifier)
+
+    h = Harness(run_guide=run)
+    with caplog.at_level(logging.DEBUG):
+        r = post(h)
+    assert sse_events(r.text) == [("error", {"code": "upstream"})]
+    for rec in caplog.records:
+        assert "AURORA 투어 일정 보여줘" not in rec.getMessage()
+        assert rec.exc_info is None

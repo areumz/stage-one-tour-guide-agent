@@ -10,6 +10,7 @@ from contracts.guide_events import (
     FocusArtist,
     GuideRequest,
     OpenTour,
+    Retract,
     TextDelta,
     ToolStatus,
     ViewContext,
@@ -409,3 +410,55 @@ async def test_stream_guide_error_after_action_recorded_emits_no_action(monkeypa
             seen.append(e)
     assert seen == [TextDelta(text="가장 가까운 공연은 ")]
     assert not any(isinstance(e, ActionEvent) for e in seen)
+
+
+def _out_ev(payload):
+    return SimpleNamespace(
+        type="run_item_stream_event",
+        name="tool_output",
+        item=SimpleNamespace(output=json.dumps(payload)),
+    )
+
+
+async def test_stream_guide_retracts_unverified_city_and_skips_action(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="tour_guide.agent")
+    fake = FakeResult([_out_ev({"shows": [{"cityCode": "SEO"}]}), _text_ev("Tokyo 공연이 있어요.")])
+    _patch_with_action(monkeypatch, fake, OpenTour(slug="aurora"))
+    events = [e async for e in stream_guide(object(), _request())]
+    assert events == [TextDelta(text="Tokyo 공연이 있어요."), Retract(reason="unverified"), Done()]
+    assert any("retract" in m for m in _msgs(caplog))
+    assert not any("Tokyo" in m for m in _msgs(caplog))
+
+
+async def test_stream_guide_tool_city_passes_check(monkeypatch):
+    fake = FakeResult([_out_ev({"shows": [{"cityCode": "TYO"}]}), _text_ev("Tokyo 공연이 있어요.")])
+    _patch_with_action(monkeypatch, fake, FocusArtist(slug="aurora"))
+    events = [e async for e in stream_guide(object(), _request())]
+    assert [type(e) for e in events] == [TextDelta, ActionEvent, Done]
+
+
+# ── 액션 안정화 (T4) ──
+
+
+async def test_prompt_artist_table_has_aliases():
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
+    ctx = RunContextWrapper(context=GuideContext(locale="ko", view=None))
+    prompt = await agent.get_system_prompt(ctx)
+    assert "aurora | AURORA, 오로라, aurora" in prompt
+    assert "velvet | VELVET, 벨벳, velvet" in prompt
+    assert "자연현상이 아니라 이 아티스트" in prompt
+
+
+async def test_prompt_has_decision_table_and_no_optional_wording():
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
+    ctx = RunContextWrapper(context=GuideContext(locale="ko", view=ViewContext(view="orbit")))
+    prompt = await agent.get_system_prompt(ctx)
+    assert "호출해도 된다" not in prompt
+    for needle in ('"투어 일정 보여줘"', '"오로라 알려줘"', "-> openTour(그 아티스트)", "-> focusArtist(그 아티스트)"):
+        assert needle in prompt
+
+
+@pytest.mark.parametrize("temperature", [None, 0.2])
+def test_temperature_wired_to_model_settings(temperature):
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini", temperature=temperature)
+    assert agent.model_settings.temperature == temperature

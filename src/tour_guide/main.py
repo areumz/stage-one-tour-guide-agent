@@ -28,10 +28,18 @@ def build_app() -> FastAPI:
     set_tracing_disabled(not settings.tracing_enabled)
     cache = ArtistsCache(make_http_fetcher(settings.onstage_url))
     limiter = RateLimiter(settings.rate_per_minute, settings.rate_per_ip_daily, settings.global_daily)
-    agent = build_agent(cache, today_kst, settings.openai_model)
+    agent = build_agent(
+        cache,
+        today_kst,
+        settings.openai_model,
+        temperature=settings.openai_temperature,
+        classifier_model=settings.classifier_model,
+    )
     return create_app(
         settings=settings,
         cache=cache,
         limiter=limiter,
-        run_guide=lambda req: stream_guide(agent, req),
+        run_guide=lambda req, needs_classifier=False: stream_guide(
+            agent, req, cache, needs_classifier=needs_classifier
+        ),
     )

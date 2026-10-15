@@ -33,7 +33,7 @@ _BLOCK_PATTERNS = [
 ]
 
 _TOPIC_KEYWORDS = (
-    "투어", "공연", "콘서트", "일정", "티켓", "앨범", "노래", "아티스트", "도시",
+    "투어", "공연", "콘서트", "일정", "티켓", "앨범", "노래", "아티스트",
     "tour", "show", "concert", "ticket", "schedule", "album", "song", "artist", "playing", "gig",
 )
 
@@ -48,10 +48,60 @@ def build_vocab(artists: list[Artist]) -> frozenset[str]:
     return frozenset(w for w in words if len(w) >= 2)
 
 
+def _is_ascii_word(w: str) -> bool:
+    return w.isascii()
+
+
+def _word_re(words) -> re.Pattern | None:
+    """영어 토큰용 단어 경계 정규식. 복수·소유격(s, 's)을 허용한다."""
+    alts = sorted({re.escape(w) for w in words}, key=len, reverse=True)
+    if not alts:
+        return None
+    return re.compile(r"(?<![a-z0-9])(?:" + "|".join(alts) + r")(?:'?s)?(?![a-z0-9])")
+
+
+_EN_KEYWORDS = tuple(k for k in _TOPIC_KEYWORDS if _is_ascii_word(k))
+_KO_KEYWORDS = tuple(k for k in _TOPIC_KEYWORDS if not _is_ascii_word(k))
+
+
 def classify(message: str, vocab: frozenset[str]) -> Verdict:
+    """순서는 고정: BLOCK(인젝션) -> PASS(어휘·키워드) -> AMBIGUOUS. 아티스트명이 있어도 BLOCK 이 먼저.
+
+    영어(ASCII)는 단어 경계로, 한국어는 조사가 붙으므로 부분 문자열로 매칭한다.
+    """
     if any(p.search(message) for p in _BLOCK_PATTERNS):
         return Verdict.BLOCK
     lowered = message.lower()
-    if any(w in lowered for w in vocab) or any(k in lowered for k in _TOPIC_KEYWORDS):
+    en = _word_re([w for w in vocab if _is_ascii_word(w)] + list(_EN_KEYWORDS))
+    ko = [w for w in vocab if not _is_ascii_word(w)] + list(_KO_KEYWORDS)
+    if (en and en.search(lowered)) or any(w in lowered for w in ko):
         return Verdict.PASS
     return Verdict.AMBIGUOUS
+
+
+# 도시 코드 -> 영문명 (계약에 영문명 필드가 없어 서버가 보관, 설계 §12 #10)
+CITY_EN = {
+    "LA": "Los Angeles", "LDN": "London", "SEO": "Seoul", "TYO": "Tokyo", "BUS": "Busan",
+    "BKK": "Bangkok", "DGU": "Daegu", "DJN": "Daejeon", "HKG": "Hong Kong", "ICN": "Incheon",
+    "MAD": "Madrid", "OSA": "Osaka", "SIN": "Singapore", "TPE": "Taipei",
+}
+
+
+def cities_in(text: str, city_table: dict[str, str]) -> set[str]:
+    """텍스트에 나온 도시 코드. 코드는 대문자 단어 경계, 영문명은 대소문자 무시 단어 경계, 한글명은 부분 문자열."""
+    found = set()
+    for code, ko in city_table.items():
+        if re.search(rf"(?<![A-Za-z0-9]){re.escape(code)}(?![A-Za-z0-9])", text):
+            found.add(code)
+            continue
+        en = CITY_EN.get(code)
+        if en and re.search(rf"(?<![a-z0-9]){re.escape(en.lower())}(?![a-z0-9])", text.lower()):
+            found.add(code)
+        elif ko and ko in text:
+            found.add(code)
+    return found
+
+
+def check_output(text: str, allowed_cities: set[str], city_table: dict[str, str]) -> bool:
+    """답변에 허용 집합 밖 도시가 있으면 False (설계 §6.2)."""
+    return cities_in(text, city_table) <= allowed_cities
