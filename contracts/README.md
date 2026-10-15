@@ -25,6 +25,7 @@ on-stage 에서 이 프로젝트가 실제로 쓰는 계약만 옮겨 둔 폴더
 | --- | --- |
 | artists.py, artist_context.md, enums_and_constants.md, fixtures/artists_response.json | [계약] |
 | guide_events.py, fixtures/guide_events_sample.json | [요구사항] (이 저장소가 소유하고 on-stage 가 따른다) |
+| ui_actions.md | [요구사항] (액션 의미, on-stage 가 정할 값과 해야 할 일) |
 
 ## 규칙
 

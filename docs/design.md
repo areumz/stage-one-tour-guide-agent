@@ -96,6 +96,8 @@ FastAPI (Cloud Run, 인스턴스 1대)
 
 `slug`·`city`는 서버가 `/api/artists`에서 만든 enum으로 검증하고, 프런트도 실행 전에 다시 검증한다. 모르는 액션은 무시하고 답변은 항상 표시한다.
 
+2b단계에서 에이전트는 `focusArtist`, `openTour`만 보내고 `openTour`는 `section` 없이 `slug`만 보낸다. `section` 값과 `openTour`의 연출 방식은 on-stage가 정한다. 의미와 on-stage가 할 일은 `contracts/ui_actions.md`에 있다. 아티스트 페이지 섹션 구분과 `context.section` 전달, `openTour`의 같은 페이지 스크롤은 on-stage 작업이며 §14.3에 인수인계 항목으로 기록했다.
+
 ## 5. 도구와 데이터
 
 `/api/artists` 한 응답에서 모든 도구를 만든다. 사용 가능한 필드: `slug, name, nameKo, tour, stats, cities[code,name,date], tracks, news`.
@@ -320,6 +322,7 @@ on-stage에 요청할 정리 (선택, 에이전트는 정리 전에도 동작):
 | SSE 클라이언트 | `POST /guide/stream`을 **`fetch` 스트리밍(`ReadableStream`)** 으로 읽는다. `EventSource`는 GET만 지원해서 POST 본문을 못 보내므로 쓸 수 없다. 이벤트 6종 처리, 연결 끊김·"다시 시도"는 새 요청으로 재전송, "답변 멈추기"는 연결 종료, `busy` 오류 처리(4단계부터) | §4, §7.2 |
 | 콜드 스타트 완화 | 패널을 열 때 `GET /health`를 한 번 호출해 인스턴스를 미리 깨움 | §10 |
 | 액션 검증·실행 | `focusArtist`, `openTour`, `highlightCity`를 실행 전에 slug·city enum으로 재검증, 모르는 액션 무시, 실패해도 답변 표시 | §4 |
+| 아티스트 페이지 섹션 구분 + `openTour` 스크롤 | 아티스트 페이지(`/artists/[slug]`)를 섹션 단위로 구분한다. 사용자가 보고 있는 섹션을 감지해 요청 `context`에 `section`으로 보내고, `openTour` 액션을 받으면 같은 페이지 안에서는 투어 섹션으로 스크롤 이동한다. **섹션 값 목록은 on-stage가 정해** 에이전트 쪽 "계약 갱신" 태스크에 전달한다 (`ViewContext`에 `section` 추가, `openTour.section` 정의, 프롬프트의 현재 화면 표기, `contracts/ui_actions.md`·fixture 갱신). 값이 정해지기 전까지 에이전트는 `section`을 보내지 않고 `context.section`도 쓰지 않는다 | §4, `contracts/ui_actions.md` |
 | 고정 문구 사전 | `tool_status` 키, `error` 코드, `retract` 사유, 안내 문구를 ko/en 사전으로 표시 (LLM이 만들지 않음) | §4 |
 | `retract` 처리 | 출력 검사 실패 시 말풍선을 고정 문구로 교체 | §6 |
 | 전체 공연 읽기 엔드포인트 (**확정**, on-stage에서 진행) | `shows` 전체(`city_code, city_name, country, venue, show_date, featured`)를 공개 GET으로 노출. 기존 `/api/shows`는 POST 전용이라 읽기가 없음. 추가하면 `contracts/`를 "계약 갱신"으로 갱신 | §5, §12 #11 |
