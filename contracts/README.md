@@ -39,6 +39,7 @@ on-stage 에서 이 프로젝트가 실제로 쓰는 계약만 옮겨 둔 폴더
 | 날짜 | 변경 |
 | --- | --- |
 | 2026-10-15 | 3단계 가드레일: `retract`(reason `unverified`)된 턴은 action 을 보내지 않고 순서는 `text_delta... → retract → done`. `ui_actions.md`, `fixtures/guide_events_sample.json`(`retract_unverified`) 갱신. 새 이벤트 타입 없음 |
+| 2026-10-15 | `ErrorCode` 에 `session_limit` 추가, `highlightCity` 규칙, fixture `error_session_limit`·`error_busy`·`success_highlight_city` (4단계) |
 
 ## 알려진 공백 (on-stage 의 현재 동작)
 

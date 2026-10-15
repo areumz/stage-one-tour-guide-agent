@@ -16,6 +16,7 @@ from contracts.guide_events import (  # noqa: E402
     ActionEvent,
     FocusArtist,
     GuideRequest,
+    HighlightCity,
     OpenTour,
     ViewContext,
 )
@@ -24,20 +25,23 @@ from tests.conftest import MINI_RAW, TODAY  # noqa: E402
 from tour_guide.agent import build_agent, stream_guide  # noqa: E402
 from tour_guide.data import ArtistsCache  # noqa: E402
 
-# (문장, 기대 액션 또는 None(액션 없음), 통과 기준)
+ORBIT = ViewContext(view="orbit")
+TOUR_AURORA = ViewContext(view="tour", slug="aurora")
+
+# (문장, 기대 액션 또는 None(액션 없음), 통과 기준, 화면)
 CASES = [
-    ("AURORA 투어 일정 보여줘", OpenTour(slug="aurora"), 6),
-    ("오로라 투어 보여줘", OpenTour(slug="aurora"), 6),
-    ("오로라 알려줘", FocusArtist(slug="aurora"), 6),
-    ("aurora 알려줘", FocusArtist(slug="aurora"), 6),
-    ("서울에서 누가 공연해?", None, 7),  # 대조군
+    ("AURORA 투어 일정 보여줘", OpenTour(slug="aurora"), 6, ORBIT),
+    ("오로라 투어 보여줘", OpenTour(slug="aurora"), 6, ORBIT),
+    ("오로라 알려줘", FocusArtist(slug="aurora"), 6, ORBIT),
+    ("aurora 알려줘", FocusArtist(slug="aurora"), 6, ORBIT),
+    ("서울에서 누가 공연해?", None, 7, ORBIT),  # 대조군
+    ("도쿄 공연은 언제 해?", HighlightCity(slug="aurora", city="TYO"), 6, TOUR_AURORA),
+    ("AURORA 도쿄 공연은 언제 해?", FocusArtist(slug="aurora"), 6, ORBIT),  # 대조군: 궤도에서는 highlightCity 대신 focusArtist
 ]
 
 
-async def run_once(agent, message: str):
-    req = GuideRequest(
-        requestId="m", sessionId="s", locale="ko", message=message, context=ViewContext(view="orbit")
-    )
+async def run_once(agent, message: str, view: ViewContext):
+    req = GuideRequest(requestId="m", sessionId="s", locale="ko", message=message, context=view)
     return [e.action async for e in stream_guide(agent, req) if isinstance(e, ActionEvent)]
 
 
@@ -50,11 +54,11 @@ async def main(runs: int) -> int:
     print(f"model={model} runs={runs}")
     print(f"{'문장':<26}{'기대':<12}{'횟수':<8}{'기준':<6}결과")
     failed = False
-    for message, expected, threshold in CASES:
+    for message, expected, threshold, view in CASES:
         want = [expected] if expected else []
         hits = 0
         for _ in range(runs):
-            hits += await run_once(agent, message) == want
+            hits += await run_once(agent, message, view) == want
         ok = hits >= threshold
         failed |= not ok
         label = f"{expected.type}" if expected else "no action"

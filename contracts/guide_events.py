@@ -13,7 +13,9 @@ MAX_MESSAGE_CHARS = 200
 ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 
 Locale = Literal["ko", "en"]
-ErrorCode = Literal["rate_limited", "off_topic", "too_long", "busy", "upstream", "internal"]
+ErrorCode = Literal[
+    "rate_limited", "off_topic", "too_long", "busy", "session_limit", "upstream", "internal"
+]
 # 아티스트 페이지(/artists/[slug])의 섹션. 값은 on-stage 가 정했다 (계약 갱신 C1·C2)
 ArtistSection = Literal["hero", "tour", "album", "gallery"]
 

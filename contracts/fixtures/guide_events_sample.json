@@ -27,6 +27,18 @@
     {"event": "retract", "data": {"reason": "unverified"}},
     {"event": "done", "data": {}}
   ],
+  "error_session_limit": [
+    {"event": "error", "data": {"code": "session_limit"}}
+  ],
+  "error_busy": [
+    {"event": "error", "data": {"code": "busy"}}
+  ],
+  "success_highlight_city": [
+    {"event": "tool_status", "data": {"tool": "getArtist", "key": "tool.getArtist"}},
+    {"event": "text_delta", "data": {"text": "AURORA의 도쿄 공연은 1월이에요."}},
+    {"event": "action", "data": {"type": "highlightCity", "slug": "aurora", "city": "TYO"}},
+    {"event": "done", "data": {}}
+  ],
   "requests": [
     {"requestId": "r1", "sessionId": "s1", "locale": "ko", "message": "AURORA 보여줘", "context": {"view": "orbit"}},
     {"requestId": "r2", "sessionId": "s1", "locale": "ko", "message": "투어 일정 보여줘", "context": {"view": "tour", "slug": "aurora", "section": "album"}},

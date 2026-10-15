@@ -71,6 +71,20 @@ on-stage 세션이 읽고 바로 브레인스토밍을 시작하기 위한 진�
 
 - 분류기 실패는 기존 `upstream`이라 추가 요청이 없다. 예시 스트림은 [fixtures/guide_events_sample.json](../contracts/fixtures/guide_events_sample.json)의 `retract_unverified`다.
 
+### 계약 갱신 요청 (4단계: 세션·`busy`·`highlightCity`)
+
+전체 근거는 [design.md §14.6](design.md), [§7.3](design.md)이다.
+
+| # | 요청 | 근거 |
+| --- | --- | --- |
+| H1 | `error` 코드 `session_limit`과 `busy`의 ko/en 문구를 사전에 추가한다. `session_limit`을 받으면 "새 대화 시작"을 안내하고 **새 `sessionId`를 만들어 대화창을 비운다** | §7.3 |
+| H2 | 답변이 스트리밍 중일 때는 전송을 막고, "답변 멈추기" 뒤에는 **연결이 닫힌 것을 확인한 뒤** 다음 요청을 보낸다 (`busy` 방지). `busy`는 재시도 없이 "아직 답변 중이에요"로 안내한다 | §4, §7.3 |
+| H3 | `highlightCity`가 의미 있는 화면(`view`/`section`)과 연출을 정해 알려 준다. 에이전트는 현재 `tour/<slug>`에서만 보내는 것을 가정한다. 다르면 이 규칙을 고친다 | §7.3 |
+| H4 | 추천 칩 문구 목록(ko/en)을 전달한다. 이 저장소의 회귀 테스트에 넣어 L2/L3와 한도를 통과하는지 확인한다 | §7.3 |
+| H5 | `highlightCity` 액션 샘플을 on-stage 계약 테스트에 추가한다 | §8.1 |
+
+- 예시 스트림은 [fixtures/guide_events_sample.json](../contracts/fixtures/guide_events_sample.json)의 `error_session_limit`, `error_busy`, `success_highlight_city`다.
+
 ## 5. 섹션 구분 메모 (on-stage 작업)
 
 [design.md §14.3](design.md)에 "아티스트 페이지 섹션 구분 + `openTour` 스크롤"로 기록한 항목이다.
@@ -112,8 +126,8 @@ PYTHONPATH=src:. uv run --env-file .env uvicorn --factory tour_guide.main:build_
 | --------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `openTour.section` 값 목록        | **확정** (`hero`/`tour`/`album`/`gallery`). 에이전트는 당분간 생략한다 |
 | 섹션 구분 방식, `context.section` | **확정·에이전트 반영 완료** (계약 갱신 C1~C5). on-stage 구현 대기 |
-| `highlightCity`                   | 4단계. 계약 모델만 있고 에이전트는 아직 보내지 않는다                                               |
-| 세션 기록·`busy`·세션 턴 상한     | 4단계                                                                                               |
+| `highlightCity`                   | 4단계 구현됨. 투어 페이지(`tour/<slug>`)에서만 보낸다. 다른 화면 요청은 H3                          |
+| 세션 기록·`busy`·세션 턴 상한     | 4단계 구현됨. `session_limit`·`busy` 문구는 H1, 전송 규칙은 H2                                      |
 | 출력 검사(`retract`), L3 분류기   | 3단계. 공개 배포 전 필수이며 `retract` 처리는 on-stage 항목에 있다                                  |
 | 전체 공연 읽기 엔드포인트         | 추가하기로 확정. **경로·응답 모양은 on-stage가 정해 전달** (위 "데이터 요청", [§12 #11](design.md)) |
 

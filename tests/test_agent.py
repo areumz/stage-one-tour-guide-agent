@@ -9,6 +9,7 @@ from contracts.guide_events import (
     Done,
     FocusArtist,
     GuideRequest,
+    HighlightCity,
     OpenTour,
     Retract,
     TextDelta,
@@ -25,6 +26,7 @@ from tour_guide.agent import (
     list_artists_json,
     map_stream_event,
     record_action_json,
+    record_highlight_json,
     search_shows_json,
     stream_guide,
 )
@@ -137,7 +139,7 @@ def test_map_tool_called_skips_action_tools(name):
     assert map_stream_event(ev) is None
 
 
-async def test_agent_has_five_tools_and_dynamic_prompt():
+async def test_agent_has_six_tools_and_dynamic_prompt():
     agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
     assert {t.name for t in agent.tools} == {
         "listArtists",
@@ -145,6 +147,7 @@ async def test_agent_has_five_tools_and_dynamic_prompt():
         "searchShows",
         "focusArtist",
         "openTour",
+        "highlightCity",
     }
     ctx = RunContextWrapper(context=GuideContext(locale="en", view=None))
     prompt = await agent.get_system_prompt(ctx)
@@ -462,3 +465,54 @@ async def test_prompt_has_decision_table_and_no_optional_wording():
 def test_temperature_wired_to_model_settings(temperature):
     agent = build_agent(make_cache(), today, model="gpt-4.1-mini", temperature=temperature)
     assert agent.model_settings.temperature == temperature
+
+
+TOUR_AURORA = ViewContext(view="tour", slug="aurora")
+
+
+async def test_highlight_city_records_valid_city_on_artist_tour_page():
+    ctx = GuideContext(locale="ko", view=TOUR_AURORA)
+    out = json.loads(await record_highlight_json(make_cache(), ctx, "aurora", "TYO"))
+    assert out == {"ok": True}
+    assert ctx.action == HighlightCity(slug="aurora", city="TYO")
+    assert ctx.action_calls == 1
+
+
+async def test_highlight_city_rejects_city_of_another_artist_and_keeps_previous():
+    ctx = GuideContext(locale="ko", view=TOUR_AURORA)
+    await record_highlight_json(make_cache(), ctx, "aurora", "SEO")
+    bad = json.loads(await record_highlight_json(make_cache(), ctx, "aurora", "BUS"))
+    assert "error" in bad
+    assert ctx.action == HighlightCity(slug="aurora", city="SEO")
+    assert ctx.action_calls == 1
+
+
+@pytest.mark.parametrize(
+    "view",
+    [None, ViewContext(view="orbit"), ViewContext(view="tour", slug="velvet")],
+)
+async def test_highlight_city_only_on_that_artists_tour_page(view):
+    ctx = GuideContext(locale="ko", view=view)
+    out = json.loads(await record_highlight_json(make_cache(), ctx, "aurora", "TYO"))
+    assert "error" in out
+    assert ctx.action is None
+
+
+async def test_highlight_city_rejects_unknown_slug_and_injected_city():
+    ctx = GuideContext(locale="ko", view=ViewContext(view="tour", slug="nobody"))
+    assert "error" in json.loads(await record_highlight_json(make_cache(), ctx, "nobody", "TYO"))
+    ctx = GuideContext(locale="ko", view=TOUR_AURORA)
+    assert "error" in json.loads(await record_highlight_json(make_cache(), ctx, "aurora", "TYO\ninjected"))
+    assert ctx.action is None
+
+
+def test_highlight_city_is_an_action_tool_hidden_from_tool_status():
+    assert map_stream_event(_tool_ev("highlightCity")) is None
+
+
+async def test_prompt_has_highlight_city_rule():
+    agent = build_agent(make_cache(), today, model="gpt-4.1-mini")
+    ctx = RunContextWrapper(context=GuideContext(locale="ko", view=TOUR_AURORA))
+    prompt = await agent.get_system_prompt(ctx)
+    for needle in ("highlightCity(slug, city)", "tour/<slug>", "도시 코드"):
+        assert needle in prompt
