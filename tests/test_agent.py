@@ -457,7 +457,12 @@ async def test_prompt_has_decision_table_and_no_optional_wording():
     ctx = RunContextWrapper(context=GuideContext(locale="ko", view=ViewContext(view="orbit")))
     prompt = await agent.get_system_prompt(ctx)
     assert "호출해도 된다" not in prompt
-    for needle in ('"투어 일정 보여줘"', '"오로라 알려줘"', "-> openTour(그 아티스트)", "-> focusArtist(그 아티스트)"):
+    for needle in (
+        '"투어 일정 보여줘"',
+        '"오로라 알려줘"',
+        "-> openTour(그 아티스트)",
+        "focusArtist(그 아티스트)도 호출한다",
+    ):
         assert needle in prompt
 
 
@@ -516,3 +521,41 @@ async def test_prompt_has_highlight_city_rule():
     prompt = await agent.get_system_prompt(ctx)
     for needle in ("highlightCity(slug, city)", "tour/<slug>", "도시 코드"):
         assert needle in prompt
+
+
+# ── 액션은 조회 뒤에만 ──
+
+
+async def _invoke(agent, tool_name, ctx_obj, args):
+    from agents.tool_context import ToolContext
+
+    tool = next(t for t in agent.tools if t.name == tool_name)
+    payload = json.dumps(args)
+    tool_ctx = ToolContext(
+        context=ctx_obj, tool_name=tool_name, tool_call_id="call-1", tool_arguments=payload
+    )
+    return await tool.on_invoke_tool(tool_ctx, payload)
+
+
+async def test_info_actions_require_a_data_tool_call_first():
+    async def fetch():
+        return MINI_RAW
+
+    agent = build_agent(ArtistsCache(fetch), lambda: TODAY, model="gpt-4.1-mini")
+    ctx = GuideContext(locale="ko", view=ViewContext(view="tour", slug="aurora"))
+    for name, args in (
+        ("focusArtist", {"slug": "aurora"}),
+        ("highlightCity", {"slug": "aurora", "city": "SEO"}),
+    ):
+        out = json.loads(await _invoke(agent, name, ctx, args))
+        assert "먼저" in out["error"]
+    assert ctx.action is None and ctx.action_calls == 0
+
+    # 이동 요청(openTour)은 조회 없이도 받는다
+    other = GuideContext(locale="ko", view=ViewContext(view="orbit"))
+    assert json.loads(await _invoke(agent, "openTour", other, {"slug": "velvet"})) == {"ok": True}
+
+    await _invoke(agent, "getArtist", ctx, {"slug": "aurora"})
+    assert ctx.data_calls == 1
+    out = json.loads(await _invoke(agent, "highlightCity", ctx, {"slug": "aurora", "city": "SEO"}))
+    assert out == {"ok": True}

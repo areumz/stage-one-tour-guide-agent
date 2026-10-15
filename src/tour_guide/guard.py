@@ -105,3 +105,32 @@ def cities_in(text: str, city_table: dict[str, str]) -> set[str]:
 def check_output(text: str, allowed_cities: set[str], city_table: dict[str, str]) -> bool:
     """답변에 허용 집합 밖 도시가 있으면 False (설계 §6.2)."""
     return cities_in(text, city_table) <= allowed_cities
+
+
+# 날짜 표현. 도구를 부르지 않은 답변에 이런 표현이 나오면 근거가 없는 것이다 (설계 §6.2)
+_DATE_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\d{4}\s*년(?:\s*\d{1,2}\s*월(?:\s*\d{1,2}\s*일)?)?",
+        r"\d{4}-\d{1,2}-\d{1,2}",
+        r"\d{1,2}\s*월(?:\s*\d{1,2}\s*일)?",
+        r"\bD-\d+\b",
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b",
+    )
+]
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"\s+", "", text).lower()
+
+
+def unsourced_dates(text: str, message: str) -> list[str]:
+    """답변에 나온 날짜 표현 중 사용자 질문에도 없던 것. 도구를 부르지 않은 턴에서만 쓴다."""
+    asked = _squash(message)
+    found: list[str] = []
+    for pattern in _DATE_PATTERNS:
+        for m in pattern.finditer(text):
+            token = _squash(m.group(0))
+            if token and token not in asked and token not in found:
+                found.append(token)
+    return found

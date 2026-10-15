@@ -35,7 +35,7 @@ from contracts.guide_events import (
 from tour_guide import tools
 from tour_guide.classifier import ClassifyFn, build_classify_fn, timed
 from tour_guide.data import ArtistsCache, city_names, load_shows, slug_set
-from tour_guide.guard import CITY_EN, check_output, cities_in
+from tour_guide.guard import CITY_EN, check_output, cities_in, unsourced_dates
 
 log = logging.getLogger("tour_guide.agent")
 
@@ -64,7 +64,7 @@ ACTION_RULES = """액션 규칙 (화면 이동. 한국어·영어 모두 같은 
 - openTour(slug): 대상이 '투어 페이지(또는 그 섹션)'일 때 쓴다. 그 아티스트의 투어 페이지를 연다.
 - 먼저 도구 조회, 그다음 액션. 일정·도시·트랙·소식이 답에 들어가는 질문은 액션 도구보다 먼저 listArtists/getArtist/searchShows를 호출하고 그 결과로 답한다. 액션 도구만 호출하고 답하지 않는 것은 금지다.
 - 의도 -> 액션 결정표 (동사와 대상으로 판단한다):
-  1. 현재 화면이 orbit이고 특정 한 아티스트에 대한 정보 질문. 동사가 알려줘/어때/언제야/몇 개야이거나, 아티스트 이름만 말한 경우(보여줘 포함). 예: "오로라 알려줘", "aurora 알려줘", "AURORA 어때?", "AURORA 투어 일정 알려줘", "벨벳 보여줘" -> focusArtist(그 아티스트). '투어 일정'이라는 말이 있어도 동사가 알려줘/언제야이면 정보 질문이다.
+  1. 현재 화면이 orbit이고 특정 한 아티스트에 대한 정보 질문. 동사가 알려줘/어때/언제야/몇 개야이거나, 아티스트 이름만 말한 경우(보여줘 포함). 예: "오로라 알려줘", "aurora 알려줘", "AURORA 어때?", "AURORA 도쿄 공연은 언제 해?", "벨벳 보여줘" -> 조회해 답한 뒤 focusArtist(그 아티스트)도 호출한다. '투어 일정'이라는 말이 있어도 동사가 알려줘/언제야이면 정보 질문이다.
   2. 투어 페이지를 열거나 보여 달라는 이동 요청. 대상이 투어(투어 일정·투어 페이지)이고 동사가 보여줘/열어줘/보러 갈래/이동이다. 예: "투어 일정 보여줘", "AURORA 투어 보여줘", "열어줘", "보러 갈래" -> openTour(그 아티스트).
   3. 여러 아티스트를 다루는 질문(비교하거나 함께 묻는 질문)이나 일반 질문(예: "서울에서 누가 공연해?") -> 호출하지 않는다.
   4. 현재 화면이 tour/<slug>이고 그 아티스트의 특정 도시 공연을 묻는 질문(예: "도쿄 공연 어디서 해?", "서울은 언제야?") -> 먼저 도구로 조회해 답하고 highlightCity(slug, city)를 호출한다. 도시는 아래 도시 코드 표의 코드를 쓰고, 그 아티스트가 공연하는 도시여야 한다.
@@ -83,6 +83,8 @@ class GuideContext:
     # 액션 도구가 기록. 마지막 유효한 호출만 남고, 답변이 끝난 뒤 stream_guide 가 한 번 내보냄
     action: FocusArtist | OpenTour | HighlightCity | None = None
     action_calls: int = 0
+    # 이번 턴에 데이터 도구(listArtists·getArtist·searchShows)를 부른 횟수. 0이면 액션 도구를 막는다
+    data_calls: int = 0
     # 출력 검사 실패로 답변을 되돌렸는지. 4단계 히스토리 저장 여부 판단에 쓴다
     retracted: bool = False
     # L2 가 AMBIGUOUS 로 판정해 L3 분류기가 필요한지. 꺼져 있으면 가드레일은 LLM 호출 없이 통과
@@ -90,6 +92,14 @@ class GuideContext:
     # 현재 질문과 직전 사용자 질문. L3 분류기가 후속 질문의 맥락을 보는 데만 쓴다 (설계 §7.3)
     message: str = ""
     prev_question: str | None = None
+
+
+# focusArtist·highlightCity 는 데이터 도구를 부른 뒤에만 받는다. 정보 질문에서 조회 없이
+# 액션만 부르고 날짜를 지어내는 것을 막는다 (openTour 는 이동 요청이라 제외)
+DATA_FIRST = json.dumps(
+    {"error": "먼저 listArtists, getArtist 또는 searchShows로 조회한 뒤 액션을 호출한다"},
+    ensure_ascii=False,
+)
 
 
 def _dump(obj) -> str:
@@ -201,38 +211,47 @@ def build_agent(
         )
 
     @function_tool(name_override="listArtists")
-    async def list_artists_tool() -> str:
+    async def list_artists_tool(ctx: RunContextWrapper[GuideContext]) -> str:
         """모든 아티스트의 slug, 이름, 투어명, 다음 공연(nextShow)을 반환한다."""
+        ctx.context.data_calls += 1
         return await list_artists_json(cache, today_fn)
 
     @function_tool(name_override="getArtist")
-    async def get_artist_tool(slug: str) -> str:
+    async def get_artist_tool(ctx: RunContextWrapper[GuideContext], slug: str) -> str:
         """아티스트 한 팀의 투어 정보를 반환한다. totalCities(전체 도시 수), featuredCities(대표 도시 공연 목록), totalTracks(전체 곡 수), featuredTracks(대표 곡 목록), news를 포함한다. slug는 아티스트 slug 코드다."""
+        ctx.context.data_calls += 1
         return await get_artist_json(cache, today_fn, slug)
 
     @function_tool(name_override="searchShows")
     async def search_shows_tool(
+        ctx: RunContextWrapper[GuideContext],
         city: str | None = None,
         month: int | None = None,
         artist: str | None = None,
         upcoming_only: bool = True,
     ) -> str:
         """공연을 검색한다. city는 도시 코드(예: TYO), month는 1-12, artist는 아티스트 slug. 조건은 모두 선택이며 날짜순으로 반환한다. upcoming_only가 true면 지난 공연은 제외한다."""
+        ctx.context.data_calls += 1
         return await search_shows_json(cache, today_fn, city, month, artist, upcoming_only)
 
     @function_tool(name_override="focusArtist")
     async def focus_artist_tool(ctx: RunContextWrapper[GuideContext], slug: str) -> str:
         """궤도 화면의 카메라를 아티스트 한 팀으로 옮긴다. slug는 아티스트 slug 코드다. 호출 조건은 시스템 프롬프트의 '액션 규칙'을 따른다."""
+        if ctx.context.data_calls == 0:
+            return DATA_FIRST
         return await record_action_json(cache, ctx.context, "focusArtist", slug)
 
     @function_tool(name_override="openTour")
     async def open_tour_tool(ctx: RunContextWrapper[GuideContext], slug: str) -> str:
         """아티스트 한 팀의 투어 페이지를 연다. slug는 아티스트 slug 코드다. 호출 조건은 시스템 프롬프트의 '액션 규칙'을 따른다."""
+        # 이동 요청은 날짜를 말할 일이 없어 조회를 강제하지 않는다 (강제하면 정보 질문으로 바뀐다)
         return await record_action_json(cache, ctx.context, "openTour", slug)
 
     @function_tool(name_override="highlightCity")
     async def highlight_city_tool(ctx: RunContextWrapper[GuideContext], slug: str, city: str) -> str:
         """아티스트 투어 페이지에서 공연 도시 하나를 강조한다. slug는 아티스트 slug 코드, city는 도시 코드(예: TYO)다. 호출 조건은 시스템 프롬프트의 '액션 규칙'을 따른다."""
+        if ctx.context.data_calls == 0:
+            return DATA_FIRST
         return await record_highlight_json(cache, ctx.context, slug, city)
 
     async def instructions(ctx: RunContextWrapper[GuideContext], _agent) -> str:
@@ -326,6 +345,27 @@ def _walk_cities(node, out: set[str]) -> None:
             _walk_cities(v, out)
 
 
+HISTORY_ANSWER_CHARS = 300
+
+
+def with_history(message: str, history: Sequence[tuple[str, str]]) -> str:
+    """이전 대화를 "참고용 블록"으로 사용자 입력 앞에 붙인다.
+
+    assistant 역할 메시지로 넣으면 모델이 도구 없이 쓴 이전 답을 흉내 내서 날짜를 지어낸다.
+    블록은 사실 근거가 아니라고 못 박고, 사실은 도구로 다시 조회하게 한다.
+    """
+    if not history:
+        return message
+    lines = "\n".join(
+        f"사용자: {user}\n가이드: {assistant[:HISTORY_ANSWER_CHARS]}" for user, assistant in history
+    )
+    return (
+        "이전 대화 (참고용이며 사실 근거가 아니다. 공연·도시·날짜는 이 대화가 아니라 "
+        "반드시 도구로 다시 조회한다):\n"
+        f"{lines}\n\n현재 질문: {message}"
+    )
+
+
 async def stream_guide(
     agent: Agent[GuideContext],
     request: GuideRequest,
@@ -340,24 +380,19 @@ async def stream_guide(
         message=request.message,
         prev_question=history[-1][0] if history else None,
     )
-    # 히스토리가 있으면 메시지 목록으로, 없으면 이전과 같이 문자열 그대로 보낸다
-    run_input: str | list[dict] = request.message
-    if history:
-        run_input = [
-            m
-            for user, assistant in history
-            for m in ({"role": "user", "content": user}, {"role": "assistant", "content": assistant})
-        ]
-        run_input.append({"role": "user", "content": request.message})
+    run_input = with_history(request.message, history)
     started = time.monotonic()
     result = Runner.run_streamed(agent, input=run_input, context=ctx, max_turns=MAX_TURNS)
     completed = False
     text_parts: list[str] = []
     tool_cities: set[str] = set()
+    data_tool_called = False
     try:
         async for raw in result.stream_events():
             _collect(raw, text_parts, tool_cities)
             mapped = map_stream_event(raw)
+            if isinstance(mapped, ToolStatus):
+                data_tool_called = True  # 액션 도구는 map_stream_event 가 걸러 낸다
             if mapped is not None:
                 yield mapped
         usage = result.context_wrapper.usage
@@ -375,7 +410,10 @@ async def stream_guide(
         table = city_names(await cache.get()) if cache is not None else dict.fromkeys(CITY_EN, "")
         past = " ".join(f"{u} {a}" for u, a in history)
         allowed = tool_cities | cities_in(request.message, table) | cities_in(past, table)
-        if not check_output("".join(text_parts), allowed, table):
+        answer = "".join(text_parts)
+        # 데이터 도구를 안 부른 답변의 날짜는 지어낸 것이다. 질문에 있던 날짜만 되풀이할 수 있다
+        invented_date = not data_tool_called and bool(unsourced_dates(answer, request.message))
+        if invented_date or not check_output(answer, allowed, table):
             ctx.retracted = True
             log.info("guide retract requestId=%s reason=unverified retract_count=1", request.requestId)
             yield Retract(reason="unverified")

@@ -51,7 +51,7 @@ flowchart TD
     D -->|애매함 / ambiguous| E[L3 소형 분류기 / Small classifier]
     E -->|block| X
     E -->|allow| F[L4 메인 에이전트 + 도구 / Main agent + tools]
-    F --> G{출력 검사 / Output check<br/>도시 대조 / city match}
+    F --> G{출력 검사 / Output check<br/>도시·날짜 근거 / city & date grounding}
     G -->|pass| H[text_delta → action → done]
     G -->|fail| I[text_delta → retract → done]
 ```
@@ -227,7 +227,7 @@ Design → per-stage implementation plans → tests first → verification again
 
 ## 알려진 제한사항 / Known Limitations
 
-- 출력 검사는 도시 코드·이름만 대조합니다. 날짜·트랙명·투어명 대조와 사전에 없는 도시는 잡지 못합니다.
+- 출력 검사는 도시 코드·이름을 대조하고, 도구를 부르지 않은 답변의 날짜 표현을 걸러 냅니다. 조회한 결과와 날짜를 대조하거나 트랙명·투어명을 대조하지는 않으며, 사전에 없는 도시는 잡지 못합니다.
 - 아티스트 이름을 섞은 이탈 질문이나 영어 단어와 겹치는 이름("aurora borealis")은 규칙 필터를 통과해 메인 프롬프트의 거절에 의존합니다(확률적).
 - 세션·한도 카운터는 서버 메모리라 재시작 시 사라지고, 인스턴스는 1대로 고정입니다.
 - 도시 목록은 on-stage의 대표 도시(`cities[]`)만 알 수 있어 "대표 도시"로 답합니다. 전체 공연 목록은 on-stage에 읽기 엔드포인트가 생기면 전환합니다.
@@ -235,7 +235,7 @@ Design → per-stage implementation plans → tests first → verification again
 
 <br>
 
-- The output check compares city codes and names only; it cannot catch dates, track or tour names, or cities missing from the table.
+- The output check compares city codes and names and rejects date expressions in answers that made no data lookup. It does not compare dates with the looked-up results or check track or tour names, and cannot catch cities missing from the table.
 - Off-topic questions that mention an artist, or names that collide with English words ("aurora borealis"), pass the rule filter and rely on the main prompt's refusal (probabilistic).
 - Sessions and counters are in memory and reset on restart; the service is pinned to one instance.
 - Only on-stage's featured cities (`cities[]`) are known, so city lists are answered as "featured cities" until a full-shows read endpoint exists.

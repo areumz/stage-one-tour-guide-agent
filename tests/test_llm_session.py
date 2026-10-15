@@ -8,6 +8,7 @@ from contracts.guide_events import (
     HighlightCity,
     Retract,
     TextDelta,
+    ToolStatus,
     ViewContext,
 )
 
@@ -69,3 +70,20 @@ async def test_city_question_in_orbit_never_emits_highlight_city():
         assert not any(
             isinstance(e, ActionEvent) and isinstance(e.action, HighlightCity) for e in events
         )
+
+
+async def test_follow_up_looks_up_data_instead_of_repeating_invented_dates():
+    """이전 답에 도구 없이 쓴 날짜가 있어도, 후속 질문은 도구로 다시 조회해 실제 날짜로 답한다."""
+    history = [
+        ("AURORA 투어 일정 보여줘", "오로라 투어 페이지를 열었습니다. 궁금한 도시 일정이 있으면 알려주세요."),
+        ("LA 공연 언제해?", "오로라의 LA 공연은 2027년 1월 10일입니다."),  # 도구 없이 지어낸 날짜
+    ]
+    good = 0
+    for _ in range(RUNS):
+        events = await _ask("서울 공연은?", history, view=ViewContext(view="tour", slug="aurora"))
+        text = "".join(e.text for e in events if isinstance(e, TextDelta))
+        looked_up = any(isinstance(e, ToolStatus) for e in events)
+        real_date = "12월 15일" in text or "2026-12-15" in text
+        clean = not any(isinstance(e, Retract) for e in events) and "2027" not in text
+        good += looked_up and real_date and clean
+    assert good >= 2
