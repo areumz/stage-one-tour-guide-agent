@@ -73,3 +73,10 @@ def test_session_settings_defaults_and_overrides():
         }
     )
     assert (s.session_ttl_seconds, s.session_max, s.history_turns, s.session_turn_limit) == (60, 10, 3, 5)
+
+
+def test_allowed_origins_trailing_slash_is_stripped():
+    s = Settings.from_env(
+        {"ONSTAGE_URL": "https://example.com", "ALLOWED_ORIGINS": "https://a.app/, https://b.app"}
+    )
+    assert s.allowed_origins == ("https://a.app", "https://b.app")

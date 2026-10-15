@@ -337,7 +337,8 @@ L0 길이 → L1 IP 한도 → 데이터 → 세션 턴 상한 → L2 규칙 →
 
 ## 10. 배포
 
-- Cloud Run, `max-instances=1`, 설정은 기존 FastAPI 에이전트와 동일하게 맞춘다 (구현 시 해당 설정을 확인해 복제).
+- Cloud Run, `max-instances=1`. **확정(2026-10-16)**: 리전 `asia-northeast3`(서울), `min-instances=0`, `--allow-unauthenticated`, OpenAI 키는 Secret Manager, `ALLOWED_ORIGINS`는 운영 도메인만(`https://on-stage-nine.vercel.app`, 끝의 `/`는 설정이 제거). 컨테이너는 저장소의 `Dockerfile`, 절차·확인은 [deploy.md](deploy.md).
+- 배포 후 반드시 확인: SSE 버퍼링 없음, CORS(운영 도메인만 허용), `TRUSTED_PROXY_HOPS=1`이 실제 클라이언트 IP를 가리키는지(서로 다른 두 네트워크로 확인. 틀리면 모든 사용자가 한 한도 통을 공유한다).
 - 인메모리 상태(세션, 카운터) 때문에 인스턴스는 1대여야 한다.
 - 콜드 스타트가 데모에서 거슬리면 `min-instances=1`로 전환한다. 기획서의 B안(Next.js 내장 TS)은 폐기한다.
 - SSE는 응답을 버퍼링하지 않도록 헤더와 서버 설정을 확인한다.

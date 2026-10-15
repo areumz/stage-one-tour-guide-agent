@@ -45,8 +45,11 @@ class Settings:
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
         e = os.environ if env is None else env
+        # Origin 은 끝에 / 가 없는 형태다. 붙어 있으면 CORS 가 항상 거절하므로 떼어 준다
         origins = tuple(
-            o.strip() for o in e.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()
+            o.strip().rstrip("/")
+            for o in e.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+            if o.strip()
         )
         if "*" in origins:
             raise ValueError("ALLOWED_ORIGINS 에 와일드카드(*)는 쓸 수 없다")
