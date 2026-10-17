@@ -8,7 +8,9 @@ A **tour-guide agent API**: fans ask about artists and shows in natural language
 
 ## 데모 / Demo
 
-<!-- 스크린샷·GIF 를 넣을 자리 / Place screenshots or GIFs here -->
+![투어 가이드 패널 · Tour Guide panel](public/screenshots/stage-one-tour-guide-agent-01.png)
+![투어 가이드 데모 1 · Tour Guide demo 1](public/screenshots/stage-one-tour-guide-agent-02.gif)
+![투어 가이드 데모 2 · Tour Guide demo 2](public/screenshots/stage-one-tour-guide-agent-03.gif)
 
 > 🔗 **라이브 데모 / Live demo**: [on-stage-nine.vercel.app](https://on-stage-nine.vercel.app/)
 > 화면의 "투어 가이드" 패널에서 질문할 수 있습니다. 로그인은 필요 없습니다.
